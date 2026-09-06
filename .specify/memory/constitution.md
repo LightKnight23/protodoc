@@ -1,6 +1,6 @@
 # Protodoc Constitution
 
-Status: DRAFT — awaiting approval by Eyvar | Version: 0.1.0 | Date: 2026-09-05
+Status: ACTIVE — approved by Eyvar 2026-09-05 | Version: 0.1.0 | Date: 2026-09-05
 
 ## Purpose
 

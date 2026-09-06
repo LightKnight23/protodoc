@@ -1,10 +1,12 @@
 # Protodoc — Clarifications
 
-Status: OPEN — blocks the plan phase | Spec ID: 001-protodoc-format-core | Date: 2026-09-05
+Status: CLOSED — all questions resolved, plan phase unblocked | Spec ID: 001-protodoc-format-core | Date: 2026-09-05
 
-No item below may pass into `plan.md` unresolved; each open question is a specification defect until Eyvar records a resolution here.
+All twelve questions were resolved by Eyvar on 2026-09-05, each adopting the stated recommendation unamended. The questions and their options are retained below as the decision record; the resolution index is in the Resolved section. Phase 3 (`plan.md`) is unblocked.
 
-## Open questions
+## Decisions
+
+Resolved 2026-09-05. Retained in full so the rejected options and their costs stay on record.
 
 Ordered by downstream gating weight: the content model first, the programme shape last.
 
@@ -21,7 +23,7 @@ Ordered by downstream gating weight: the content model first, the programme shap
 | C. Hybrid: counted positions legal only inside an immutable published state, identity anchors mandatory for anything surviving an edit | Compact locators in published and signed artefacts; identity where editing happens | Two position models in one format, so every consumer implements both and CON-005 needs an explicit carve-out; conversion at the publish boundary is a new failure surface |
 
 - **Recommendation:** Option A. No repair function exists at rest, so an offset is a stale pointer the moment anyone else edits; CON-001 then scopes counted positions to non-persisted surfaces only.
-- **Resolution:** _pending_
+- **Resolution:** APPROVED 2026-09-05 by Eyvar. Option A adopted as recommended, unamended.
 
 ### CQ-002: Smallest unit carrying durable identity
 
@@ -36,7 +38,7 @@ Ordered by downstream gating weight: the content model first, the programme shap
 | C. Block identity only: ranges and comments snap to whole blocks | Smallest identity index; simplest merge; smallest at-rest floor | Cannot express a comment on a phrase or a range crossing a block boundary, so US-002 and FR-025 are unsatisfiable and every annotation silently widens to its block |
 
 - **Recommendation:** Option A. It is the only option that expresses a phrase-level comment and a cross-block range, and run-merging holds the demonstrated cost under one extra octet per character.
-- **Resolution:** _pending_
+- **Resolution:** APPROVED 2026-09-05 by Eyvar. Option A adopted as recommended, unamended.
 
 ### CQ-003: What canonical form is a property of
 
@@ -51,7 +53,7 @@ Ordered by downstream gating weight: the content model first, the programme shap
 | C. Both are normative file states distinguished by a declared flag, with identical state digests | Writers can pick the cheap state and still publish a canonical one; migration between them is explicit | Two normative file states means two parser paths, two sets of conformance cases and a flag whose mis-setting is a new class of interop divergence, against CON-005 |
 
 - **Recommendation:** Option A. It is the only assignment under which byte-stability and bounded write are jointly satisfiable, and it names one signable object without forcing a rewrite.
-- **Resolution:** _pending_
+- **Resolution:** APPROVED 2026-09-05 by Eyvar. Option A adopted as recommended, unamended.
 
 ### CQ-004: Permitted non-deterministic inputs
 
@@ -66,7 +68,7 @@ Ordered by downstream gating weight: the content model first, the programme shap
 | C. Determinism required only of content components, with integrity and signature components excluded wholesale | Simple partition; signatures never fight the audit | Identifier minting sits in content and still needs entropy, so the rule fails on its first real case; a wholesale exclusion also hides ambient values inside integrity components where no one audits them |
 
 - **Recommendation:** Option A. A closed, named list keeps the audit mechanical, and deterministic signing means one state signed twice with one key yields identical octets (NFR-006).
-- **Resolution:** _pending_
+- **Resolution:** APPROVED 2026-09-05 by Eyvar. Option A adopted as recommended, unamended.
 
 ### CQ-005: Signature survival across publish and redaction
 
@@ -81,7 +83,7 @@ Ordered by downstream gating weight: the content model first, the programme shap
 | C. Publish is prohibited on signed documents; redaction must precede signing | No signature ever spans removed content; smallest specification | Real workflows sign first and redact later for disclosure, so the format refuses the archetypal compliance case and users fall back to printing and re-scanning |
 
 - **Recommendation:** Option A, with hiding commitments so omitted content is not recoverable by search over retained digests. It is the only option that lets a compliance officer publish a redacted copy that still carries the original attestation.
-- **Resolution:** _pending_
+- **Resolution:** APPROVED 2026-09-05 by Eyvar. Option A adopted as recommended, unamended.
 
 ### CQ-006: Rendering conformance strictness
 
@@ -96,7 +98,7 @@ Ordered by downstream gating weight: the content model first, the programme shap
 | C. Keep rasterisation tolerance-bounded, stating per-channel and per-sample tolerances, and reserve byte-identity for text-free content | Removes the shaping problem from the critical path entirely; implementers can use existing text stacks | The pinned-presentation signature claim weakens to approximately what the signatory saw, and NFR-019's zero-tolerance raster equality plus the durable-profile claim both have to be restated |
 
 - **Recommendation:** Option B for v1: pin a named versioned shaping algorithm and an exact Unicode version, prohibit execution of any font instruction stream, ship decode-and-shape conformance vectors. Option A stays the long-term goal, off the critical path.
-- **Resolution:** _pending_
+- **Resolution:** APPROVED 2026-09-05 by Eyvar. Option B adopted as recommended, unamended.
 
 ### CQ-007: Component addressing
 
@@ -111,7 +113,7 @@ Ordered by downstream gating weight: the content model first, the programme shap
 | C. Content-addressed with a per-document salt | Removes cross-document linkability while keeping one integrity mechanism | Cross-document deduplication is forfeited entirely, and the salt is a per-document ambient value needing its own site in the CQ-004 allowlist |
 
 - **Recommendation:** Option B, paired with FR-059 so canonical storage order never depends on a digest. Linkability is acceptable while v1 defines no confidentiality model, and revisiting it is a stated dependency of any later one.
-- **Resolution:** _pending_
+- **Resolution:** APPROVED 2026-09-05 by Eyvar. Option B adopted as recommended, unamended.
 
 ### CQ-008: Default history mode
 
@@ -126,7 +128,7 @@ Ordered by downstream gating weight: the content model first, the programme shap
 | C. No history by default | Smallest files; no erasure liability; simplest reader | Forfeits the review, merge and audit differentiator on the default path, so the properties the format exists for are opt-in and mostly unused |
 
 - **Recommendation:** Option A. It preserves review and merge for a document's working life while leaving a lawful in-place removal path; complete history stays available for regulated and archival use.
-- **Resolution:** _pending_
+- **Resolution:** APPROVED 2026-09-05 by Eyvar. Option A adopted as recommended, unamended.
 
 ### CQ-009: Unicode normalization scope
 
@@ -141,7 +143,7 @@ Ordered by downstream gating weight: the content model first, the programme shap
 | C. NFD per segment | Combining sequences are decomposed, making per-character identity and mark-level anchoring uniform | Diverges from the conventional interchange form, inflates scalar counts and at-rest size, and forces every consumer to recompose before comparison |
 
 - **Recommendation:** Option A. Per-segment scoping is what makes concurrent insertion at a combining-mark boundary a reachable, serialisable state.
-- **Resolution:** _pending_
+- **Resolution:** APPROVED 2026-09-05 by Eyvar. Option A adopted as recommended, unamended.
 
 ### CQ-010: Raster encoding admitted in v1
 
@@ -156,7 +158,7 @@ Ordered by downstream gating weight: the content model first, the programme shap
 | C. Lossless only in the durable profile, one bit-exact lossy codec elsewhere | Archival documents stay maximally faithful while everyday documents stay small | Two raster profiles, so a document changes size class when it claims the durable profile, and conversion at that boundary is lossy in one direction and untestable for equality |
 
 - **Recommendation:** Option A. A bit-exact decoder profile preserves the raster byte-identity claim while removing the size penalty; leaving it out prices photographs out of the format.
-- **Resolution:** _pending_
+- **Resolution:** APPROVED 2026-09-05 by Eyvar. Option A adopted as recommended, unamended.
 
 ### CQ-011: v1 deliverable scope
 
@@ -171,7 +173,7 @@ Ordered by downstream gating weight: the content model first, the programme shap
 | C. v1 = specification and corpora only; all tooling deferred | Fastest to a frozen specification; smallest team | Every asserted property becomes undemonstrable by a user, and CP-003's two-implementation gate has nothing to run against, so the specification freezes untested |
 
 - **Recommendation:** Option A. It keeps every gate that tests a non-retrofittable property and moves the two product-scale deliverables off the critical path.
-- **Resolution:** _pending_
+- **Resolution:** APPROVED 2026-09-05 by Eyvar. Option A adopted as recommended, unamended.
 
 ### CQ-012: Second implementation before v1
 
@@ -186,8 +188,45 @@ Ordered by downstream gating weight: the content model first, the programme shap
 | C. Partial: second implementation of the validator only | Verdict-equality is testable at modest cost; catches the parser-differential class | Canonical octet equality stays untested, so the property the whole determinism programme rests on ships unverified across implementations |
 
 - **Recommendation:** Option A, scoped to container, validator and canonical serialiser. Those are exactly the layers the byte-identity and verdict-equality gates test, and the layers where divergence is unrecoverable once files exist.
-- **Resolution:** _pending_
+- **Resolution:** APPROVED 2026-09-05 by Eyvar. Option A adopted as recommended, unamended.
 
 ## Resolved
 
-None yet. Each resolution is appended here with its date, the chosen option, and the requirement IDs amended as a result; the corresponding open question is then struck from the section above.
+All twelve questions resolved 2026-09-05 by Eyvar, each adopting the recommendation unamended.
+
+| ID | Question | Option adopted | Date |
+|---|---|---|---|
+| CQ-001 | Persisted position model | A | 2026-09-05 |
+| CQ-002 | Smallest unit carrying durable identity | A | 2026-09-05 |
+| CQ-003 | What canonical form is a property of | A | 2026-09-05 |
+| CQ-004 | Permitted non-deterministic inputs | A | 2026-09-05 |
+| CQ-005 | Signature survival across publish and redaction | A | 2026-09-05 |
+| CQ-006 | Rendering conformance strictness | B | 2026-09-05 |
+| CQ-007 | Component addressing | B | 2026-09-05 |
+| CQ-008 | Default history mode | A | 2026-09-05 |
+| CQ-009 | Unicode normalization scope | A | 2026-09-05 |
+| CQ-010 | Raster encoding admitted in v1 | A | 2026-09-05 |
+| CQ-011 | v1 deliverable scope | A | 2026-09-05 |
+| CQ-012 | Second implementation before v1 | A | 2026-09-05 |
+
+No requirement identifier was amended by these resolutions: every resolution adopted the option the requirement set was already drafted against.
+
+## Accepted deviations
+
+Recorded at the same approval. Each is a departure from a stated process rule, accepted deliberately rather than overlooked.
+
+### AD-001: Fourth requirement identifier class
+
+The SDD identifier scheme defines `FR-*`, `NFR-*` and `CON-*`. The specification adds `TR-*` for twelve requirements binding the reference library and command-line tool rather than the format itself.
+
+- **Accepted:** 2026-09-05 by Eyvar.
+- **Reason:** Tooling obligations are not format obligations, and folding them into `FR-*` would let a conformance claim about the format be satisfied by a property of one implementation, which CP-009 forbids.
+- **Consequence:** `TR-*` participates in traceability exactly as the other classes do: every `TR-*` maps to a task and a named test in `analysis.md`.
+
+### AD-002: Uniform must priority
+
+All 197 requirements carry priority `must`. The must/should/could axis is unused, so requirement priority conveys no sequencing information.
+
+- **Accepted:** 2026-09-05 by Eyvar.
+- **Reason:** Scope was cut at the boundary instead, in specification section 5.2 and in CQ-011, which moved converters and the live collaboration engine off the v1 critical path. What remains is the set without which the format's differentiating properties are not testable.
+- **Consequence:** Sequencing is carried entirely by task dependencies in `tasks.md`, not by requirement priority. Phase 4 must therefore produce an explicit dependency ordering; it cannot fall back on priority to decide what is built first. If phase 3 finds the remaining set still too large for one release, the correction is a scope decision under CP-002, not a silent re-tiering.

@@ -1,6 +1,6 @@
 # Protodoc: Document Format and Tooling — Specification
 
-Status: DRAFT — awaiting approval by Eyvar | Spec ID: 001-protodoc-format-core | Date: 2026-09-05
+Status: APPROVED — Eyvar, 2026-09-05 | Spec ID: 001-protodoc-format-core | Date: 2026-09-05
 
 ---
 
@@ -1490,6 +1490,8 @@ These requirements bind the reference library and command-line tool rather than 
 ---
 
 ## 7. Open questions
+
+None. All twelve clarifications were resolved on 2026-09-05; see `clarify.md` for the decision record, the rejected options and two accepted process deviations (AD-001, AD-002). The table below is retained for traceability.
 
 These are unresolved and recorded in `clarify.md`. Under SDD, any unresolved item here blocks phase 3 (Plan). They are not answered in this document.
 
