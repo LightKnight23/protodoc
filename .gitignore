@@ -1,0 +1,12 @@
+# JetBrains
+.idea/
+
+# Go
+*.exe
+*.test
+*.out
+/bin/
+/dist/
+
+# macOS
+.DS_Store
