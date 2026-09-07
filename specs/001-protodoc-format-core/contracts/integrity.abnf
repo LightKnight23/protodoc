@@ -1,0 +1,564 @@
+; Protodoc Ledger (PDL) -- Integrity, Signature and Redaction Grammar
+; ============================================================================
+; Spec:      specs/001-protodoc-format-core/spec.md (APPROVED)
+; Decisions: specs/001-protodoc-format-core/clarify.md CQ-001..CQ-012 (CLOSED)
+; Phase:     003-plan, Repair Set 2 architecture (see plan.md)
+; Formalism: ABNF (RFC 5234 core rules), same as container.abnf and document.abnf,
+;            for the same reason (bespoke PDL-TLV grammar, not protobuf/CBOR/
+;            ASN.1; see DP-002 and contracts/README.md).
+;
+; This file defines: the two digest trees (T_S, T_C) and their domain-tag
+; registry; structure_digest and signed_object, the two values a signature
+; actually authenticates; the coverage descriptor's exact wire form and
+; canonicalisation rule; the SIGNATURE record; the closed 7-step Ed25519
+; verification procedure (EdDSA-Protodoc-1); redaction commitments and
+; erasure records; the RescindResign longevity record; and long-term-
+; validation evidence (credential chains, revocation evidence, time
+; attestations). Everything here is carried inside an ATTEST-typed segment
+; (container.abnf S5) EXCEPT the two trees (S2), which are computed over
+; CONTENT/RESOURCE octets already defined in document.abnf, and the
+; ERASURE_RECORD shape (S7.2), which is carried inside a HISTORY-typed
+; segment (document.abnf S1's discriminant 0x0D) precisely because it
+; retypes a HISTORY_OP_BATCH frame in place rather than living in ATTEST.
+;
+; Section 0's primitives are repeated byte-identically from container.abnf
+; and document.abnf so this file parses standalone.
+; ============================================================================
+
+; ---- 0. Shared primitives (identical in container.abnf and document.abnf) -
+u8            = OCTET                       ; NORMATIVE: 1 octet, value 0..255
+u16           = 2OCTET                      ; NORMATIVE: big-endian unsigned 16-bit integer
+u32           = 4OCTET                      ; NORMATIVE: big-endian unsigned 32-bit integer
+u48           = 6OCTET                      ; NORMATIVE: big-endian unsigned 48-bit integer
+u64           = 8OCTET                      ; NORMATIVE: big-endian unsigned 64-bit integer
+digest256     = 32OCTET                     ; NORMATIVE: a SHA-256 output (crypto/sha256, stdlib)
+unit-id       = 16OCTET                     ; NORMATIVE: opaque content-unit identity; see document.abnf S0
+state-id      = 32OCTET                     ; NORMATIVE: FR-003; = the state's T_C_root (S2 below)
+zero16        = %x00.00.00.00.00.00.00.00.00.00.00.00.00.00.00.00
+                                             ; NORMATIVE: reserved all-zero unit-id sentinel ("no reference"); see container.abnf S0
+
+varint        = varint-u8 / varint-u16 / varint-u32 / varint-u64
+varint-u8     = %x00-FC
+varint-u16    = %xFD 2OCTET                 ; NORMATIVE: reject if value <= 252
+varint-u32    = %xFE 4OCTET                 ; NORMATIVE: reject if value <= 65535
+varint-u64    = %xFF 8OCTET                 ; NORMATIVE: reject if value <= 4294967295
+; NORMATIVE, informative property relied on below: because marker octets 253/254/255 are numerically
+; greater than every literal single-octet value (0-252), and each wider form is fixed-width big-endian,
+; unsigned byte-lexicographic comparison of two complete PDL-VARINT encodings ALWAYS agrees with numeric
+; comparison of the values they encode. This is what makes "sorted-vec-of(range)" (S4 below) sort by
+; start_ordinal without any special-cased comparator; it does not hold for every variable-length integer
+; scheme (LEB128 does not have this property), so it is stated here rather than assumed.
+
+field         = field-tag field-len field-value
+field-tag     = OCTET                       ; NORMATIVE: strictly ascending within one record instance (PD-TLV-001)
+field-len     = varint
+field-value   = *OCTET
+plain-seq-of-X    = varint *element-X
+sorted-vec-of-X   = varint *element-X       ; NORMATIVE: strict ascending unsigned byte-lex order over full encoded octets
+
+
+; ============================================================================
+; 1. ATTEST DISCRIMINANT REGISTRY (this file's half of the global registry; see document.abnf S1)
+; ============================================================================
+;   0x40  SIGNATURE               legal in: ATTEST                           (S5)
+;   0x41  RESCIND_RESIGN          legal in: ATTEST                           (S8)
+;   0x42  ATTESTATION_EVIDENCE    legal in: ATTEST                           (S9)
+;   0x43 - 0x7F reserved for future ATTEST record kinds; v1 does not assign any of them. A v1 reader
+;         MUST REJECT (not skip) a frame carrying one of these values, for the identical PD-DISC-001
+;         reason document.abnf S1 gives for its own 0x0E-0x3F and 0x80-0xFE ranges.
+; NORMATIVE (FR-002, closes the coverage self-reference circularity by construction): every frame
+; discriminated 0x40-0x42 lives ONLY inside a segment whose SegmentTableSlot.slot-segment-type = ATTEST
+; (4, container.abnf S5.1), and every ATTEST-typed segment ordinal is categorically excluded from every
+; CoverageDescriptor's covered_segment_ranges AND uncovered_segment_ranges (S4 below) -- it is simply
+; never nameable in either list, for any signature, including its own. This is a structural property of
+; the segment's type tag, checked before any coverage arithmetic runs, not a claim about reachability
+; from a mutable pointer (research.md S5's "TN-008" discussion contrasts this deliberately with a
+; rejected competitor's reachability-based carve-out, which was itself circular in a way this is not).
+
+
+; ============================================================================
+; 2. DIGEST TREES -- T_S (storage integrity) and T_C (content commitment / redaction)
+; ============================================================================
+; Domain-tag registry (1 octet, the first octet of every hash preimage defined in this file). A single
+; shared, non-overlapping registry, so no two preimage classes anywhere in the format can ever collide
+; even if their remaining octets happened to coincide (research.md S5's "T_C leaf-tag reuse" finding is
+; exactly the class of bug this registry-wide non-overlap closes):
+;
+;   0x00  ABSENT_CHILD_DIGEST filler        preimage = the single octet 0x00 (S2.3)        [this file]
+;   0x01  T_S internal node                 preimage = 0x01 || 16 x 32-octet child slot     (S2.1)
+;   0x02  T_C redactable leaf               preimage = 0x02 || salt(32) || canon(subtree)   (S2.2)
+;   0x03  reserved (future tree leaf/internal kind)
+;   0x04  signed_object                     preimage: see S3.2
+;   0x05  reserved
+;   0x06  reserved
+;   0x07  T_C non-redactable leaf           preimage = 0x07 || canon(subtree)               (S2.2)
+;   0x08  T_C internal node                 preimage = 0x08 || 16 x 32-octet child slot     (S2.2)
+;   0x09  severance_commitment              preimage: see S7.2                    [PLAN-ASSIGNED, see note]
+;   0x0A  structure_digest                  preimage: see S3.1
+;   0x0B - 0xFF reserved for future domain-separated preimage classes.
+;
+; PLAN-ASSIGNED NOTE: tags 0x00, 0x01, 0x02, 0x04, 0x07, 0x08 and 0x0A are given their exact numeric
+; value in the architecture materials this contracts pass was handed. Tag 0x09 (severance_commitment)
+; is named only as a concept ("a severance-domain-tag") in those materials, with no numeric value ever
+; assigned; this pass assigns 0x09, the first unused slot between the T_C internal-node tag (0x08) and
+; structure_digest's tag (0x0A), and reserves the remainder of the space explicitly rather than leaving
+; it open. Flagged in README.md "Fields this phase originated."
+;
+; ---- 2.1 T_S (storage integrity tree, arity 16, depth 4) -------------------
+; NORMATIVE: general, signature-independent self-consistency check over the physical SegmentTable
+; (container.abnf S5); used by unsigned documents and by bounded-prefix consumers. T_S's root is NEVER
+; embedded in signed_object (S3.2): it is free to change under PARTIAL COMPACTION (container.abnf S8)
+; without invalidating any signature, because a signature authenticates T_C_root and structure_digest
+; directly, neither of which depends on T_S.
+t-s-leaf            = digest256                     ; NORMATIVE: = SegmentTableSlot.slot-digest for the segment at
+                                                     ; this tree position; tree position EQUALS segment ordinal
+                                                     ; (storage order), unlike T_C (S2.2).
+t-s-internal        = %x01 16t-s-child
+t-s-child           = digest256                     ; NORMATIVE: the child's own node digest (leaf or internal), OR
+                                                     ; ABSENT_CHILD_DIGEST (S2.3) if this tree position has no
+                                                     ; corresponding SegmentTableSlot at all.
+; NORMATIVE: arity is ALWAYS exactly 16 at every internal node, depth is ALWAYS exactly 4 (16^4 = 65536
+; leaf capacity, giving headroom over MAX_SEGMENTS = 16384); a node's preimage is ALWAYS 1 + 16*32 = 513
+; octets regardless of how many of its 16 children are real, so two implementations hash an identical
+; 513-octet buffer for an identical logical tree shape with no ambiguity about a shorter or omitted
+; buffer for a partially-populated node.
+
+; ---- 2.2 T_C (content commitment / redaction tree, arity 16, depth <= 5) ---
+; NORMATIVE: the PRIMARY signed structural commitment (CQ-005, CQ-007); T_C_root is signed directly
+; inside signed_object (S3.2), never routed through T_S.
+t-c-leaf-redactable = %x02 tc-salt tc-canon         ; NORMATIVE (CQ-004 site #2): tc-salt is 32-octet CSPRNG,
+                                                     ; minted once at signing time, one salt per designated
+                                                     ; redactable subtree; lives INSIDE the subtree it commits and
+                                                     ; is destroyed with it on redaction (S7.1).
+t-c-leaf-nonredactable = %x07 tc-canon
+tc-salt             = digest256                     ; (32 octets, reusing the digest256 width purely for its size)
+tc-canon            = *OCTET                        ; NORMATIVE: canon(subtree) = the complete PDL-TLV canonical
+                                                     ; encoding (document.abnf S0's `record` grammar: the record's
+                                                     ; discriminant plus every field it carries, at strictly
+                                                     ; ascending tags) of the ONE content-model record (TEXT_BLOCK,
+                                                     ; ANNOTATION, TABLE, NOTE, CROSS_REFERENCE, EXT_ENVELOPE,
+                                                     ; RASTER_IMAGE, FONT_SUBSET, REGISTRY_EXCERPT or
+                                                     ; PRESENTATION_ARTEFACT, document.abnf S2-S7) that this subtree
+                                                     ; ordinal names, exactly as that record's frame is stored,
+                                                     ; never a re-derived or re-normalised copy.
+t-c-internal        = %x08 16t-c-child
+t-c-child           = digest256                     ; NORMATIVE: as t-s-child, but at a T_C tree position (subtree
+                                                     ; ordinal, S2.2's traversal order below), never a storage ordinal.
+
+; ---- 2.2.1 T_C traversal order (NORMATIVE, not a grammar rule; FLAGGED GAP) -
+; T_C's subtree ordinal order is required, by research.md S5, to be a "canonical depth-first order over
+; content subtrees, fixed by the document's logical structure," and explicitly NEVER the storage ordinal
+; and NEVER a digest value. No document root, top-level block sequence, or other ordering-defining
+; record was given anywhere in the constitution, spec, clarify decisions, the architecture record, or
+; either sibling plan artefact (data-model.md, research.md) available to this contracts pass: every
+; content-model record (document.abnf S2-S7) has its own opaque unit-id, but nothing upstream names
+; which record is "first," or what makes one record a structural child of another for traversal
+; purposes, independent of storage order.
+;
+; This is a genuine, load-bearing gap, not a wire-detail this pass can safely default silently: T_C_root
+; is the value a signature actually signs, so an unstated traversal order is exactly the kind of free
+; parameter that would let two independent implementations compute two different, both "correct," T_C
+; roots for the identical logical document, which is precisely the two-implementation-divergence failure
+; class CP-003 and NFR-001 exist to close.
+;
+; INTERIM RULE adopted by this contracts pass, so T_C_root is at least computable and reproducible today:
+; subtree ordinal order = ascending unsigned byte-lexicographic order of each content-model record's own
+; unit-id (document.abnf S0). This satisfies the stated NEGATIVE constraints exactly (a unit-id is
+; neither a storage ordinal nor a digest: it is a CSPRNG-minted token independent of both, CQ-007/FR-023)
+; and is fully deterministic and computable with no additional concept. It does NOT satisfy the stated
+; POSITIVE aspiration ("fixed by the document's logical structure... paragraph/table/resource nesting"):
+; a CSPRNG-ordered traversal carries no relationship to reading order at all. FLAGGED, not silently
+; presented as settled: a proper fix needs a ROOT_SEQUENCE (or equivalent) record naming the document's
+; top-level reading order, added to document.abnf, with T_C's traversal redefined as a genuine pre-order
+; walk from that root, recursing into each record's own reference fields (table cells, note bodies,
+; annotation body blocks) in the order document.abnf S2-S7 already declare them, treating a unit-id
+; reached a second time (a legitimately shared reference) as a leaf occurrence without recursing into it
+; again. This redefinition is additive (it changes T_C's traversal rule, not any digest formula, tag, or
+; tree arity/depth fact above) and should land before phase 6 implementation begins; recorded in
+; README.md's flagged-conflicts list and carried forward to `tasks.md`.
+
+; ---- 2.3 ABSENT_CHILD_DIGEST --------------------------------------------------
+absent-child-digest = digest256                     ; NORMATIVE: = SHA-256(0x00), a single-octet preimage. Reserved
+                                                     ; domain tag 0x00 is unreachable by any real digest in this
+                                                     ; registry (every real preimage starts 0x01, 0x02, 0x04, 0x07,
+                                                     ; 0x08, 0x09 or 0x0A), so this filler value can never collide
+                                                     ; with a genuine node, leaf, or top-level digest. Used as the
+                                                     ; child-slot value at every T_S or T_C internal-node position
+                                                     ; that has no corresponding real child, at every level of the
+                                                     ; tree, not only at the root.
+
+
+; ============================================================================
+; 3. structure_digest AND signed_object -- the two values a signature authenticates
+; ============================================================================
+; ---- 3.1 structure_digest (NORMATIVE ALGORITHM, not a pure grammar rule) ---
+; A verifier computes structure_digest FRESH from the current file's actual octets, restricted to the
+; covered_prefix_regions_bitmask (S4) claimed by the specific signature being verified, and NEVER reads
+; a stored copy as authoritative (closing the forged-inventory class FR-104/105 exist to prevent). This
+; makes structure_digest insensitive to the physical placement of anything UNCOVERED, which is what
+; makes PARTIAL COMPACTION safe (container.abnf S8, DP-013/DP-016).
+;
+; The preimage buffer is assembled in this fixed order; each numbered item's presence is conditional as
+; stated, and the concatenation itself, once assembled, is hashed once with SHA-256:
+;   1. Domain tag 0x0A (one octet, always present).
+;   2. header_bytes[0,480) (container.abnf S2, the Header region up to but excluding header-digest)
+;      IF AND ONLY IF bit HEADER is set in the bitmask; omitted (zero octets contributed) otherwise.
+;   3. The winning CommitRingRecord's own octets [0,480) (its ring-fields plus ring-reserved, excluding
+;      its own record-digest, container.abnf S3) IF AND ONLY IF bit RING_WINNER is set; omitted otherwise.
+;      NORMATIVE, DISAMBIGUATED: ring-fields itself carries a field ALSO named `structure-digest`
+;      (container.abnf S3), which is a cached, default-coverage (all bits set, all ordinals covered)
+;      computation of THIS SAME algorithm, made at commit time, never itself authoritative. When this
+;      item 3 is included, that field's octets are absorbed as opaque bytes of the 480-octet span being
+;      hashed, exactly like every other ring-fields byte; they are not separately interpreted, and the
+;      signature's OWN structure_digest being computed right now (which this whole procedure defines) is
+;      not thereby self-referential: the two are different values under the same field name, distinguished
+;      by which coverage_descriptor produced them, one signature-specific and freshly computed, one
+;      ring-cached and default-scoped. See container.abnf S3's own field comment for the full statement.
+;   4. ledger-length (8 octets, container.abnf S3's ring-fields field of the SAME name), ALWAYS present
+;      unconditionally regardless of any bitmask bit, because its purpose (blocking truncation/rollback
+;      replay) must hold even for a signature that covers none of the prefix regions by choice.
+;   5. frontmatter_metadata_bytes IF AND ONLY IF bit FRONTMATTER is set: the encoded octets of ONLY
+;      Frontmatter's document_metadata-equivalent fields (container.abnf S4's fm-title, fm-page-count,
+;      fm-page-dimensions, fm-language, fm-colour-profile-id, in that field-tag order); fm-preview-raster,
+;      fm-preview-digest and fm-source-snapshot NEVER participate, covered bit or not (they are non-
+;      normative per HC-009 regardless of coverage). Omitted (zero octets) when the bit is unset.
+;   6. covered_prefix_regions_bitmask itself (1 octet), ALWAYS present unconditionally, so a verifier
+;      always knows which of items 2, 3, 5 and 8 the signer actually claimed, independent of which bits
+;      happen to be set.
+;   7. IF AND ONLY IF bit SEGMENT_TABLE is set: sorted-vec-of(covered-segment-summary), one entry per
+;      ordinal named anywhere in the signature's covered_segment_ranges (S4); each entry:
+;        covered-segment-summary = css-ordinal css-type css-length css-digest
+;        css-ordinal  = u16                          ; the segment ordinal (container.abnf S5's ordinal space)
+;        css-type     = u8                           ; = that segment's current SegmentTableSlot.slot-segment-type
+;        css-length   = u48                          ; = that segment's current SegmentTableSlot.slot-length
+;        css-digest   = digest256                    ; = SHA-256 RECOMPUTED FRESH over that segment's actual
+;                       current octets at verify time (container.abnf S6.3's segment-self-digest formula),
+;                       NEVER read from the stored SegmentTableSlot.slot-digest or from the segment's own
+;                       trailing segment-self-digest, so an attacker who tampers with a segment's bytes
+;                       AND both of its own stored digests cannot also forge what the verifier itself
+;                       recomputes here.
+;      NORMATIVE: when the bitmask's SEGMENT_TABLE bit is unset, this item contributes zero octets even if
+;      covered_segment_ranges happens to be non-empty (the bit is the single fast, bounded-prefix-
+;      readable signal of "is any content covered at all," letting a bounded-prefix consumer answer that
+;      question without decoding the potentially large range list at all, TR-007).
+;   8. IF AND ONLY IF bit INTEGRITY_BLOCK is set: T_S's root (S2.1), RECOMPUTED FRESH over the current
+;      file's SegmentTable at verify time, never read from CommitRingRecord.ledger-root as authoritative.
+;
+; ---- 3.2 signed_object -----------------------------------------------------
+; signed-object-preimage = %x04 t-c-root structure-digest presentation-artefact-digest coverage-descriptor-digest
+; NORMATIVE: t-c-root = the CURRENT T_C_root (S2.2), recomputed fresh over the covered subtree set at
+; verify time. presentation-artefact-digest = the referenced PRESENTATION_ARTEFACT segment's own
+; SegmentTableSlot.slot-digest (document.abnf S7.4; content-addressed, never separately stored inside the
+; SIGNATURE record itself). coverage-descriptor-digest = SHA-256 over the coverage-descriptor structure's
+; (S4) own canonical encoded octets exactly as carried inside the SIGNATURE record, so a change to any
+; range entry or the bitmask changes signed_object even though the descriptor is also carried verbatim
+; alongside it (the digest, not the raw bytes, is what participates in the 129-octet preimage above:
+; 1 + 32 + 32 + 32 + 32 = 129 octets, hashed once with SHA-256 to produce the 32-octet signed_object).
+signed-object       = digest256                     ; = SHA-256(signed-object-preimage)
+
+
+; ============================================================================
+; 4. COVERAGE DESCRIPTOR
+; ============================================================================
+coverage-descriptor = cd-mode cd-covered-ranges cd-uncovered-ranges cd-bitmask
+cd-mode             = u8                            ; NORMATIVE: 0x00 = TOTAL, 0x01 = SUBSET; 0x02-0xFF reserved,
+                                                     ; reject. TOTAL requires cd-covered-ranges to name every
+                                                     ; currently-populated non-ATTEST ordinal and cd-uncovered-ranges
+                                                     ; to be empty; this is a consequence of the general well-
+                                                     ; formedness rule below, not a separately-coded special case.
+cd-covered-ranges   = sorted-vec-of-X               ; X = segment-range (below); "covered_segment_ranges"
+cd-uncovered-ranges = sorted-vec-of-X               ; X = segment-range; "uncovered_segment_ranges"
+cd-bitmask          = u8                            ; NORMATIVE (covered_prefix_regions_bitmask): bit0 = HEADER,
+                                                     ; bit1 = RING_WINNER, bit2 = FRONTMATTER, bit3 = SEGMENT_TABLE,
+                                                     ; bit4 = INTEGRITY_BLOCK, bits 5-7 reserved, MBZ, reader MUST
+                                                     ; reject a nonzero reserved bit.
+
+segment-range       = sr-start sr-end
+sr-start            = varint                        ; inclusive start ordinal
+sr-end              = varint                        ; exclusive end ordinal (half-open range [start, end))
+; NORMATIVE (rules PD-COVER-001..003, data-model.md S2.12, S6.5):
+;   PD-COVER-001  sr-end MUST be > sr-start (a zero-length range is rejected, not silently dropped).
+;   PD-COVER-002  merge-adjacent canonicalisation is MANDATORY: two entries (a,b) and (b,c) in the SAME
+;                 list (both covered, or both uncovered) MUST NOT appear separately; they MUST be a
+;                 single entry (a,c). Exactly one valid encoding exists per coverage set; any other
+;                 encoding (including a technically-sorted but unmerged pair) is rejected, never accepted
+;                 as an alternate valid form.
+;   PD-COVER-003  no ordinal MAY appear in both cd-covered-ranges and cd-uncovered-ranges, and no ordinal
+;                 in [0, segment_count) at the winning CommitRingRecord's own segment-count (container.abnf
+;                 S3) MAY be covered by neither list; a gap or an overlap is rejected before any
+;                 signature verification step runs.
+;   PD-COVER-004  no range in either list MAY name an ordinal whose current SegmentTableSlot.slot-
+;                 segment-type = ATTEST (4): ATTEST ordinals are never nameable in a CoverageDescriptor
+;                 at all, in either list, for any signature (S1 above; closes FR-002's circularity).
+
+
+; ============================================================================
+; 5. SIGNATURE
+; ============================================================================
+signature           = sig-discriminant sig-param-set sig-signed-object sig-value sig-coverage
+                      sig-cred-chain-ref sig-revocation-ref sig-time-attestation-ref sig-intent
+                      sig-presentation-ref
+sig-discriminant    = %x40                          ; tag=0
+sig-param-set       = field                         ; tag=1; field-value = u16, the v1 closed allowlist id (S10.2)
+sig-signed-object   = field                         ; tag=2; field-value = digest256 (S3.2); the value verification
+                                                     ; recomputes and compares against
+sig-value           = field                         ; tag=3; field-value = 64 octets: R (32, a compressed Edwards
+                                                     ; point) concatenated with S (32, a little-endian scalar), the
+                                                     ; standard RFC 8032 Ed25519 signature encoding. NORMATIVE (CQ-004
+                                                     ; site #3): the only non-deterministic input at signing time is
+                                                     ; the private key material itself; RFC 8032 Ed25519 signing is
+                                                     ; deterministic given (key, message), so signing the same
+                                                     ; signed-object twice with the same key yields byte-identical
+                                                     ; sig-value (NFR-006).
+sig-coverage        = field                         ; tag=4; field-value = coverage-descriptor (S4)
+sig-cred-chain-ref  = field                         ; tag=5; field-value = unit-id -> an ATTESTATION_EVIDENCE frame
+                                                     ; (S9) with ae-kind = 0 (credential-chain); MUST NOT be zero16
+sig-revocation-ref  = field                         ; tag=6; field-value = unit-id -> ATTESTATION_EVIDENCE with
+                                                     ; ae-kind = 1 (revocation-evidence), or zero16 if none was
+                                                     ; current at signing time (FR-070 requires it be carried when
+                                                     ; current; a signature over a moment with no revocation
+                                                     ; authority reachable carries zero16 here, which is itself part
+                                                     ; of what long-term verification (FR-072, FR-073) reasons about)
+sig-time-attestation-ref = field                    ; tag=7; field-value = unit-id -> ATTESTATION_EVIDENCE with
+                                                     ; ae-kind = 2 (time-attestation); MUST NOT be zero16 (FR-070)
+sig-intent          = field                         ; tag=8; field-value = u8 (S10.3 registry)
+sig-presentation-ref = field                        ; tag=9; field-value = unit-id -> a PRESENTATION_ARTEFACT
+                                                     ; segment (document.abnf S7.4). PLAN-ADDED FIELD (flagged,
+                                                     ; README.md): data-model.md's Signature entity lists
+                                                     ; presentation_artefact_digest only as an INPUT to signed_object's
+                                                     ; own formula (S3.2) without ever stating how a Signature record
+                                                     ; itself names WHICH PresentationArtefact that digest belongs to;
+                                                     ; this field supplies that missing reference. The digest itself
+                                                     ; is never separately stored (S3.2): it is always the referenced
+                                                     ; segment's own SegmentTableSlot.slot-digest, recomputed fresh.
+; NORMATIVE: MAX_SIGNATURES = 64 per document (an upper bound on the count of SIGNATURE frames across all
+; ATTEST segments in one document, checked as a structural ceiling, PD-BUDGET-xxx per CON-011 if exceeded
+; on an otherwise-valid document).
+; NORMATIVE: signature identity is the pair (t-c-root, structure-digest) at signing time (data-model.md
+; S2.13); two SIGNATUREs over the identical covered state are distinguishable only by sig-param-set and
+; sig-value, never by any other field.
+
+
+; ============================================================================
+; 6. EdDSA-Protodoc-1 -- the closed 7-step Ed25519 verification procedure
+; ============================================================================
+; NORMATIVE ALGORITHM (not a grammar rule; this is why it is stated in prose with named constants rather
+; than as an ABNF production -- ABNF has no way to express "run this arithmetic check, then delegate").
+; Confirmed against the installed go1.25.1 toolchain: `go doc crypto/ed25519` shows VerifyWithOptions's
+; Options type exposes only {Hash, Context} (for selecting Ed25519ph/ctx); there is no lever anywhere in
+; the standard library to choose cofactored-versus-cofactorless verification or to select among the
+; several documented, mutually divergent EdDSA verification equations. EdDSA-Protodoc-1 pre-filters
+; exactly the inputs where implementations are documented to diverge, using cheap, curve-arithmetic-free
+; integer and byte comparisons, then delegates the uncontested remainder to unmodified stdlib. Inputs:
+; A = the signer's 32-octet Ed25519 public key (taken from the leaf certificate inside the
+; ATTESTATION_EVIDENCE frame named by sig-cred-chain-ref, S9); R, S = the two 32-octet halves of
+; sig-value; msg = sig-signed-object's 32-octet value (S3.2). Let p = 2^255 - 19 and
+; L = 2^252 + 27742317777372353535851937790883648493 (both exact, from RFC 8032).
+;
+;   Step 1  Decode A as a little-endian 255-bit magnitude (mask off the top bit of octet 31, which
+;           carries the x-coordinate's sign) plus that sign bit. Reject if the 255-bit magnitude is
+;           >= p (a NON-CANONICAL encoding: a value that decodes to the same curve point as
+;           magnitude - p but is not the unique minimal encoding RFC 8032 section 5.1.3 requires).
+;   Step 2  Reject if A's decoded curve point is one of the 8 known SMALL-ORDER points (the full torsion
+;           subgroup of edwards25519, whose order-8 cofactor gives it exactly 8 elements: the identity,
+;           the order-2 point, two order-4 points and four order-8 points). Checked as an exact 32-octet
+;           comparison of A's own encoding against a fixed table of 8 constant 32-octet compressed
+;           encodings.
+;   Step 3  Identical canonical-encoding check as Step 1, applied to R.
+;   Step 4  Identical small-order check as Step 2, applied to R.
+;   Step 5  Decode S as a little-endian 256-bit unsigned integer. Reject if S >= L.
+;   Step 6  Compute the challenge k = SHA-512(R || A || msg) mod L via stdlib crypto/sha512. This step
+;           is stated for exposition (it is exactly the equation RFC 8032 section 5.1.7 defines and that
+;           stdlib crypto/ed25519.Verify computes internally as part of Step 7); EdDSA-Protodoc-1's own
+;           code does not compute k a second time outside that call. It is named here so an implementer
+;           can see precisely why Steps 1-5's pre-filtering is sufficient: k's inputs (R, A, msg) are
+;           already canonical and non-small-order by this point, so stdlib's internal computation of k
+;           and the curve equation it feeds cannot diverge from strict RFC 8032 behaviour on this input.
+;   Step 7  Delegate to unmodified stdlib crypto/ed25519.Verify(A, msg, R||S). Its boolean result is the
+;           procedure's result. A rejection at any earlier step short-circuits: this call is never made
+;           on an input Steps 1-5 already rejected, so no later step's cost or behaviour is observable on
+;           a rejected input (this closes a timing/behavioural side channel between "rejected at step 2"
+;           and "rejected at step 7" being distinguishable only by which check ran, never by which one a
+;           reader chose to trust).
+;
+; CONSTANT TABLE, FLAGGED (not fabricated): the 8 small-order compressed-point encodings used by Steps 2
+; and 4 are a fixed, universally-agreed set with a precise mathematical characterisation (points whose
+; order divides 8 on the edwards25519 curve), but this contracts pass does not reproduce their literal
+; 32-octet hex values here. Restating cryptographic magic constants from memory, in a normative document,
+; carries a real risk of a silent transcription error that would either reintroduce the exact
+; acceptance-of-small-order-keys vulnerability this procedure exists to close (if a wrong constant is
+; too permissive) or reject valid signatures (if too strict) -- a mistake worse than leaving the table
+; named-but-not-inlined. Implementers MUST populate this table verbatim from a cited, checkable primary
+; source before shipping the reference implementation: RFC 8032 (point encoding, section 5.1.3) together
+; with Chalkias, Garillot and Nikolaenko, "Taming the many EdDSAs" (2020), Table 1 (the enumerated
+; small-order point encodings), the same paper research.md S5 already cites as the source of the
+; documented cross-implementation divergence this whole procedure closes. CI SHOULD assert the table's
+; SHA-256 digest against a value computed once from that source and pinned in the conformance corpus, so
+; a future accidental edit to the table is caught even without re-deriving the constants by hand.
+
+
+; ============================================================================
+; 7. REDACTION AND ERASURE
+; ============================================================================
+; ---- 7.1 RedactionCommitment ------------------------------------------------
+; NORMATIVE: this is exactly t-c-leaf-redactable (S2.2); listed again here only for its lifecycle role.
+; Removal (the act of redaction) deletes BOTH the subtree's own octets AND tc-salt together, in the same
+; operation; the retained value at that leaf position is the bare 32-octet commitment digest alone
+; (S2.2's t-c-leaf-redactable hash output), with no salt and no plaintext remaining anywhere in the file.
+; NORMATIVE (FR-075): post-removal exhaustive search cost is 2^256 (the full preimage space of a 32-octet
+; SHA-256 output with the salt gone), exceeding FR-075's 2^80 floor by 176 bits of margin.
+; NORMATIVE (RED-ALIGN, document.abnf S2): every redactable subtree's boundary lands on a document-model
+; record boundary (most commonly a TEXT_BLOCK boundary); a redaction can never split one record in half.
+
+; ---- 7.2 ERASURE_RECORD (discriminant 0x0D, carried in a HISTORY-typed segment) -
+; NORMATIVE (CQ-008): a HISTORY segment's HISTORY_OP_BATCH frames (document.abnf S9) are retyped in
+; place, frame-for-frame at the same ordinal, to ERASURE_RECORD frames immediately after each commit,
+; if and only if the document's history-mode (container.abnf S2) = 0x02 (no history). This retype is
+; irreversible and destroys the original operation content octets at the moment it happens.
+erasure-record      = er-discriminant er-identity er-digest er-commitment er-salt
+er-discriminant     = %x0D                          ; tag=0
+er-identity         = field                         ; tag=1; field-value = unit-id, the severed unit's or state's
+                                                     ; own original identity (never a newly minted one)
+er-digest           = field                         ; tag=2; field-value = digest256, the severed content's own
+                                                     ; digest as it stood before severance (carries no content octets)
+er-commitment       = field                         ; tag=3; field-value = digest256 = severance-commitment (S2's
+                                                     ; domain tag 0x09): SHA-256(0x09 || er-salt-value || er-digest-value)
+er-salt             = field                         ; tag=4; field-value = digest256 (32-octet CSPRNG, DESTROYED at
+                                                     ; the moment of trim; absent/all-zero after destruction, present
+                                                     ; only in the brief window between minting and trim)
+; NORMATIVE (FR-061), FLAGGED DEVIATION (see README.md "Corrections made to inherited artefacts" and
+; plan.md spec_conflicts item 1): FR-061's literal text calls for a BARE, unsalted digest per
+; unreconstructable published state. Because a bare digest is unsalted, it is a brute-force dictionary
+; oracle over exactly the class of content (names, dates, amounts) FR-075 spends 256 bits of salt to
+; protect against the IDENTICAL attack in the redaction path (S7.1 above); implementing FR-061 literally
+; reopens, for trimmed history, the exact privacy hole FR-075 exists to close for redaction. This
+; contracts pass ships the salted-commitment form above (er-commitment, using the SAME construction
+; shape as t-c-leaf-redactable, domain-tag-separated at 0x09) as ERASURE_RECORD's normative wire form. It
+; is a proposed correction to FR-061's literal text, not something the currently-approved spec.md
+; authorizes on its own words; it is not implemented quietly. Eyvar/themis rules on this before phase 5
+; (analyze) closes, per research.md S8 item 1 and plan.md's own spec_conflicts entry for FR-061.
+
+
+; ============================================================================
+; 8. RESCIND_RESIGN -- two-scheme custody chain across a future signature-scheme break
+; ============================================================================
+; NORMATIVE (DP-017): creatable ONLY during a major-version migration (a `migrate` CLI operation
+; crossing a format-major boundary, cli.md); the prior Signature and its full metadata (including its
+; own ATTESTATION_EVIDENCE references, S9) remain retained, unmodified, in the already-mandatory
+; pre-migration state. A verifier presented with both a RESCIND_RESIGN and the Signature it points to
+; reports an explicit two-entry custody chain (old scheme at its own time, new scheme at its own time),
+; never silently preferring one over the other.
+rescind-resign      = rr-discriminant rr-prior-sig-ref rr-new-param-set rr-new-signed-object
+                      rr-new-signature-value rr-migration-state-id
+rr-discriminant     = %x41                          ; tag=0
+rr-prior-sig-ref    = field                         ; tag=1; field-value = unit-id -> the retained pre-migration
+                                                     ; SIGNATURE frame (S5); MUST NOT be zero16
+rr-new-param-set    = field                         ; tag=2; field-value = u16, the NEW allowlist entry (S10.2);
+                                                     ; MUST differ from every param_set_id already retired or in use
+                                                     ; by the prior signature, and MUST be one the new format-major
+                                                     ; version's own capability set declares (container.abnf S2's
+                                                     ; capability-written arithmetic)
+rr-new-signed-object = field                        ; tag=3; field-value = digest256, computed over the MIGRATED
+                                                     ; content's T_C_root (S3.2's formula, applied to the migrated
+                                                     ; state rather than the pre-migration one)
+rr-new-signature-value = field                      ; tag=4; field-value = 64 octets, same R||S shape as sig-value (S5)
+rr-migration-state-id = field                       ; tag=5; field-value = state-id, the migrated document's own
+                                                     ; state_id (= its T_C_root) at the moment of migration
+; NORMATIVE: ATTEST-typed, categorically excluded from every CoverageDescriptor exactly like an ordinary
+; SIGNATURE (S1, S4's PD-COVER-004). NORMATIVE: exactly one RESCIND_RESIGN per (migration event, new
+; param_set_id) pair; a second RESCIND_RESIGN naming the identical pair at the identical
+; rr-migration-state-id is rejected as a duplicate identifier (FR-110's general duplicate-identifier
+; rule, applied here to the pair (rr-migration-state-id, rr-new-param-set) as this record's own identity).
+; NORMATIVE (FR-109): rr-prior-sig-ref is one of the 5 named cycle-detection edge kinds (data-model.md S7
+; step 8: structural moves, extension-envelope fallback references [document.abnf S6], annotation anchor
+; references [document.abnf S3], run split/merge lineage [document.abnf S2.1], and RescindResignRecord
+; chains, this field); a RescindResign chain that eventually points back to itself, directly or through
+; an intermediate migration, is rejected naming every edge of the cycle.
+
+
+; ============================================================================
+; 9. ATTESTATION_EVIDENCE -- long-term validation material (FR-070, FR-071)
+; ============================================================================
+; PLAN-LEVEL DESIGN (flagged, README.md): data-model.md's Signature entity types credential_chain_ref,
+; revocation_evidence_ref and time_attestation_ref as opaque `[]byte`/refs with no stated wire shape.
+; This contracts pass gives them one, unifying all three under a single record kind distinguished by a
+; kind selector, since all three are the identical shape at this grammar's level of detail: an opaque,
+; DER-encoded blob conforming to an established external standard, carried whole and unexecuted (CP-005:
+; a document is data and never a program; parsing DER structure to extract dates and key material is not
+; "executing" it in the CP-005 sense any more than decoding a PLP-1 raster is). Referencing RFC 5280,
+; RFC 6960 and RFC 3161 by number is a reference to an open IETF standard, not to "a named application or
+; application version" (CON-006/CP-009's actual prohibition); the interoperability characteristic (ISO/
+; IEC 25010) calls for exactly this: standard data formats over a proprietary reinvention of certificate
+; chains, OCSP and timestamp tokens.
+attestation-evidence = ae-discriminant ae-id ae-kind ae-format ae-der-octets ae-nested-cred-chain ae-nested-revocation
+ae-discriminant     = %x42                          ; tag=0
+ae-id               = field                         ; tag=1; field-value = unit-id, this evidence's own identity
+ae-kind             = field                         ; tag=2; field-value = u8: 0x00 = credential-chain,
+                                                     ; 0x01 = revocation-evidence, 0x02 = time-attestation;
+                                                     ; 0x03-0xFF reserved, reject.
+ae-format           = field                         ; tag=3; field-value = u8, the external standard ae-der-octets
+                                                     ; conforms to, constrained by ae-kind:
+                                                     ;   ae-kind=0x00 (credential-chain)   : ae-format MUST = 0x00
+                                                     ;     (X.509 v3 certificate chain, RFC 5280, DER, concatenated
+                                                     ;     leaf-to-root)
+                                                     ;   ae-kind=0x01 (revocation-evidence): ae-format = 0x01 (OCSP
+                                                     ;     response, RFC 6960, DER) or 0x02 (certificate revocation
+                                                     ;     list, RFC 5280, DER)
+                                                     ;   ae-kind=0x02 (time-attestation)   : ae-format MUST = 0x03
+                                                     ;     (TimeStampToken, RFC 3161, DER)
+                                                     ; any other (ae-kind, ae-format) pairing is rejected.
+ae-der-octets       = field                         ; tag=4; field-value = the opaque DER-encoded blob itself
+ae-nested-cred-chain = field                        ; tag=5; field-value = unit-id -> another ATTESTATION_EVIDENCE
+                                                     ; with ae-kind=0x00, or zero16. NORMATIVE (FR-071): MANDATORY
+                                                     ; (non-zero16) when this record's own ae-kind = 0x02
+                                                     ; (time-attestation): the attesting timestamping authority's OWN
+                                                     ; credential chain, so its signature is checkable offline exactly
+                                                     ; as strictly as the primary signatory's. MUST be zero16 for
+                                                     ; ae-kind 0x00 or 0x01 (no second level of nesting beyond this).
+ae-nested-revocation = field                        ; tag=6; field-value = unit-id -> another ATTESTATION_EVIDENCE
+                                                     ; with ae-kind=0x01, or zero16. NORMATIVE (FR-071): MANDATORY
+                                                     ; when ae-kind = 0x02, symmetric to ae-nested-cred-chain; the
+                                                     ; TSA's own revocation evidence current at the attested time.
+; NORMATIVE (FR-070's LTV requirement): verification of the full evidence chain (a signature's
+; credential chain and revocation evidence, plus its time attestation's own nested credential chain and
+; revocation evidence) MUST succeed with all network interfaces disabled and a fixed, locally-held
+; trust-anchor list, since none of these documents' cited authorities are expected to answer a live query
+; thirty years hence.
+
+
+; ============================================================================
+; S10. RESERVED IDENTIFIER RANGES (this file's own namespaces)
+; ============================================================================
+; ---- S10.1 Field-tag reserved tails, per record type defined in this file --
+;   SIGNATURE              tags 1-9 assigned, 10-255 reserved
+;   RESCIND_RESIGN         tags 1-5 assigned, 6-255 reserved
+;   ATTESTATION_EVIDENCE   tags 1-6 assigned, 7-255 reserved
+;   ERASURE_RECORD         tags 1-4 assigned, 5-255 reserved
+; (PDL-TLV tag scoping is per record type, never global; see container.abnf S0, DP-002.)
+;
+; ---- S10.2 param_set_id (u16, SIGNATURE and RESCIND_RESIGN's own field) ----
+;   0x0000            reserved  : never valid; marks an invalid/absent allowlist selection
+;   0x0001            assigned  : {Ed25519 per RFC 8032, verified via EdDSA-Protodoc-1 (S6)} paired with
+;                                 {SHA-256 for signed_object and structure_digest, S3}. The entire v1
+;                                 allowlist (CQ-004's "deterministic signature schemes mandated").
+;   0x0002 - 0xFFFF   reserved  : future major-version allowlist entries only (e.g. a post-quantum
+;                                 signature scheme, once one exists in the Go standard library --
+;                                 research.md S7 confirms go1.25's stdlib ships crypto/mlkem, a key-
+;                                 encapsulation mechanism, but no post-quantum SIGNATURE scheme as of
+;                                 this writing), reachable ONLY via RESCIND_RESIGN (S8) at a major-version
+;                                 migration boundary, never mid-version.
+;
+; ---- S10.3 sig-intent (u8, SIGNATURE's own field) --------------------------
+; PLAN-ASSIGNED (flagged): FR-070 requires "a signing-intent value from a closed set" but no set is
+; enumerated anywhere upstream. This pass assigns:
+;   0x00  author-approval        (the document's own author signing their own work)
+;   0x01  witness-attestation    (a signatory attesting they witnessed the document's execution)
+;   0x02  notarization           (a signatory attesting to identity verification, not content approval)
+;   0x03  custodial-transfer     (used by a RESCIND_RESIGN's rr-new-signature-value, S8: the new
+;                                 signature's intent is custody continuity, not fresh approval)
+;   0x04-0xFF reserved for a future major version; a v1 reader MUST reject a value outside 0x00-0x03.
+;
+; ---- S10.4 cd-mode and ae-kind / ae-format ----------------------------------
+; Repeated here for completeness of this file's reserved-range index; defined inline at S4 and S9
+; respectively. Both are closed 1-octet enums; both reject (never skip) an out-of-range value, for the
+; same reason every closed enum in this format rejects rather than defaults (non-negotiable #8).

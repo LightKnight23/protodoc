@@ -1,0 +1,499 @@
+; Protodoc Ledger (PDL) -- Container Framing Grammar
+; ============================================================================
+; Spec:      specs/001-protodoc-format-core/spec.md (APPROVED)
+; Decisions: specs/001-protodoc-format-core/clarify.md CQ-001..CQ-012 (CLOSED)
+; Phase:     003-plan, Repair Set 2 architecture (see plan.md)
+; Formalism: ABNF (RFC 5234 core rules + RFC 7405 case-sensitive strings).
+;            PDL-TLV is a bespoke grammar (protocol buffers, deterministic
+;            CBOR, ASN.1 DER, FlatBuffers and Cap'n Proto were all considered
+;            and rejected at DP-002 -- see contracts/README.md). ABNF is used
+;            here to describe a BINARY grammar, not a text protocol: the only
+;            core rule actually consumed below is OCTET (%x00-FF). CRLF/SP/
+;            HTAB and the other text-protocol core rules are never used and
+;            carry no meaning for this format.
+;
+; Every field below carries an exact type and an exact limit. Every
+; constraint ABNF cannot express (endianness, cross-field arithmetic,
+; algorithm choice, ordering predicates) is stated in a comment tagged
+; NORMATIVE immediately next to the field or rule it binds. A NORMATIVE
+; comment is binding text, not explanatory prose.
+;
+; This file defines the CONTAINER: the fixed 1,048,576-octet prefix and the
+; append-only ledger that follows it. Content-model record shapes (TextBlock,
+; Run, Annotation, Table, Note, cross-reference, extension envelope, history
+; operations) are defined in contracts/document.abnf. Digest trees, the
+; signature envelope, coverage descriptors and redaction/erasure commitments
+; are defined in contracts/integrity.abnf. All three files share the
+; primitive rules in section 0, repeated byte-identically in each file so
+; every grammar file parses standalone.
+; ============================================================================
+
+; ---- 0. Shared primitives (identical in document.abnf and integrity.abnf) -
+u8            = OCTET                       ; NORMATIVE: 1 octet, value 0..255
+u16           = 2OCTET                      ; NORMATIVE: big-endian unsigned 16-bit integer
+u32           = 4OCTET                      ; NORMATIVE: big-endian unsigned 32-bit integer
+u48           = 6OCTET                      ; NORMATIVE: big-endian unsigned 48-bit integer
+u64           = 8OCTET                      ; NORMATIVE: big-endian unsigned 64-bit integer
+digest256     = 32OCTET                     ; NORMATIVE: a SHA-256 output (crypto/sha256, stdlib); see integrity.abnf S3 for which preimage
+unit-id       = 16OCTET                     ; NORMATIVE: opaque content-unit identity (CON-008); alphabet = all 256 octet values;
+                                             ; equality is exact 16-octet comparison, no case-folding, no path/hierarchy semantics.
+                                             ; NORMATIVE (FR-023 extended): every unit-id MUST be minted by a CSPRNG (crypto/rand,
+                                             ; stdlib) carrying no actor, device, clock or session-derived value, so that the
+                                             ; 16-way unit-index routing in S3.5 loads its buckets near-uniformly.
+state-id      = 32OCTET                     ; NORMATIVE: FR-003 document-state identifier; = the state's T_C_root (see integrity.abnf)
+ext-token     = 8OCTET                      ; NORMATIVE: registered/owner-scoped extension token; see S5.2 for the reserved ranges
+zero16        = %x00.00.00.00.00.00.00.00.00.00.00.00.00.00.00.00
+                                             ; NORMATIVE: the reserved all-zero unit-id sentinel (SEQUENCE-START); never assigned to a
+                                             ; real unit because FR-023 minting draws from a CSPRNG (P(all-zero) < 2^-128).
+
+; PDL-VARINT: Bitcoin-CompactSize-style minimal-length integer (DP-002).
+; NORMATIVE: a reader MUST reject any encoding of a value in a shorter form's range, i.e. non-minimal
+; encodings are a validity failure (rule PD-VARINT-001), not merely discouraged.
+varint        = varint-u8 / varint-u16 / varint-u32 / varint-u64
+varint-u8     = %x00-FC                     ; NORMATIVE: value = the octet itself, range 0..252
+varint-u16    = %xFD 2OCTET                 ; NORMATIVE: value = big-endian u16 of the 2 trailing octets; reader MUST reject value <= 252
+varint-u32    = %xFE 4OCTET                 ; NORMATIVE: value = big-endian u32 of the 4 trailing octets; reader MUST reject value <= 65535
+varint-u64    = %xFF 8OCTET                 ; NORMATIVE: value = big-endian u64 of the 8 trailing octets; reader MUST reject value <= 4294967295
+
+; PDL-TLV generic field grammar. Used by every self-describing record in
+; Frontmatter (this file), and every record type in document.abnf and
+; integrity.abnf. NEVER used for Header, CommitRingRecord or SegmentTableSlot
+; (S1-S2, S4 below), which are raw fixed-layout structs with zero tags.
+field         = field-tag field-len field-value
+field-tag     = OCTET                       ; NORMATIVE: scoped PER RECORD-TYPE SCHEMA (not global); 0-255; within one record
+                                             ; instance, fields MUST appear in strictly ascending field-tag order; a reader MUST
+                                             ; reject a record whose tags repeat or descend (rule PD-TLV-001). A tag the reader's
+                                             ; own schema copy does not define is legal ONLY inside a record type's documented
+                                             ; reserved tail (S5.3) and MUST then be skipped using field-len; a record type has at
+                                             ; most 256 fields, ever (permanent ceiling, CON-009).
+field-len     = varint                      ; NORMATIVE: octet length of field-value, minimal PDL-VARINT encoding
+field-value   = *OCTET                      ; NORMATIVE: exactly field-len octets; a reader unable to allocate field-len octets
+                                             ; without exceeding NFR-030's 4x-input-length bound MUST reject before allocating (FR-106)
+record        = *field                      ; NORMATIVE: a record is a field sequence terminated by its enclosing frame's declared length,
+                                             ; never by an in-band terminator octet (there is none)
+
+; Sequence and sorted-vector conventions (DP-002).
+; NORMATIVE: PDL-TLV has exactly one repeated-value form: a count-prefixed sequence. There is no
+; second repetition encoding anywhere in the format (no null-terminated list, no fixed-arity array
+; distinct from this form). A "plain sequence" preserves authored/resolved order and carries no
+; ordering validity rule beyond well-formedness of each element. A "sorted vector" is additionally
+; REQUIRED to be in strictly ascending unsigned byte-lexicographic order (Go bytes.Compare semantics)
+; over each element's complete encoded octets; a reader MUST reject equal-adjacent or descending-adjacent
+; elements (rule PD-SORT-001). A key/value pair sequence sorts by the key's encoded octets only.
+plain-seq-of-X    = varint *element-X       ; NORMATIVE: varint = element count; X defined per use site
+sorted-vec-of-X   = varint *element-X       ; NORMATIVE: as plain-seq-of-X, PLUS strict ascending order over full encoded octets
+
+; ============================================================================
+; 1. TOP-LEVEL FILE STRUCTURE
+; ============================================================================
+protodoc-file = prefix ledger
+; NORMATIVE: file length MUST be >= 1,048,576 octets (PREFIX_LENGTH). A file shorter than
+; PREFIX_LENGTH is truncated (FR-102) and rejected before any field below is interpreted.
+
+prefix        = header commit-ring frontmatter segment-table
+; NORMATIVE: prefix occupies file offsets [0, 1048576) exactly, PREFIX_LENGTH = 1048576 (2^20).
+; Every offset in this file is a compile-time constant, never derived from a length field read at
+; runtime, so TR-006/TR-007/TR-008's "read the leading 1048576 octets, zero decode" property holds
+; by construction: a scanner locates every prefix field by fixed-offset arithmetic alone.
+;
+; CONTRACTS-PHASE RESOLUTION (see README.md "Resolved layout tensions"): the architecture's physical-
+; shape summary names a trailing "IntegrityBlock+UnitIndexRoot" region between SegmentTable and the
+; 1,048,576 boundary. SegmentTable's own exact size (MAX_SEGMENTS=16384 slots x 48 octets = 786432,
+; independently corroborated by the T_S arity-16/depth-4 sizing and by every numeric_budget_compliance
+; row that cites it) already consumes the ENTIRE remainder of the prefix after Header+CommitRing+
+; Frontmatter (512 + 3584 + 258048 + 786432 = 1048576 exactly), leaving no room for a fourth physical
+; region. This grammar therefore carries "IntegrityBlock" and "UnitIndexRoot" as FIELDS of the winning
+; CommitRingRecord (t_c_root and index-route, S2 below) rather than as a disjoint byte range: they are
+; still determinable from the leading 1,048,576 octets exactly as TR-006/007/008 require, just co-located
+; with the ring rather than trailing the segment table. No requirement is reopened by this; it fixes an
+; internal arithmetic inconsistency in the given physical-shape prose using the same document's own more
+; heavily corroborated numbers.
+
+ledger        = *segment
+; NORMATIVE: append-only. A conforming writer never rewrites an octet belonging to a previously sealed
+; segment (FR-056, FR-117); the only lawful mutations to already-written ledger octets are (a) FULL
+; COMPACTION, which re-emits the entire document as a fresh file via L*(state) and is refused while any
+; signature is present (NFR-004), or (b) PARTIAL COMPACTION (S4.4), which relocates or reclaims only
+; segments whose ordinals lie outside every present signature's covered_segment_ranges (integrity.abnf S4).
+
+
+; ============================================================================
+; 2. HEADER -- offsets [0, 512), raw fixed-layout struct, zero PDL-TLV
+; ============================================================================
+header              = format-identity header-reserved header-digest
+; NORMATIVE: octets [0,32) (format-identity) are FROZEN FOREVER starting at format-major=1: no future
+; major version may relocate, resize or reinterpret any field inside them (CP-008, FR-006, FR-010).
+
+format-identity     = magic format-major format-minor document-class
+                      capability-written capability-required durable-claim
+                      history-mode unicode-version-id shaping-profile-id
+                      prefix-layout-id
+; offsets:              [0,8) [8,10)      [10,12)     [12,14)
+;                       [14,16)            [16,18)          [18]          [19]
+;                       [20,22)            [22,24)             [24,32)
+; NORMATIVE: format-identity is exactly 32 octets: 8+2+2+2+2+2+1+1+2+2+8 = 32.
+
+magic               = %x50.44.4C.31.00.00.00.00
+                      ; NORMATIVE: registered magic (FR-125), ASCII "PDL1" + 4 reserved zero octets.
+                      ; Content-independent, user-supplied-value-free (FR-007): no writer may vary it.
+format-major        = u16     ; NORMATIVE: FR-006/FR-009/FR-010/FR-123/FR-119-123. v1 = 1. A reader
+                               ; encountering a format-major it does not implement MUST decline to
+                               ; render naming the required major version and MUST NOT apply any
+                               ; construct disposition (FR-123) -- this is the UNSUPPORTED verdict
+                               ; (cli.md), distinct from INVALID.
+format-minor        = u16     ; NORMATIVE: capability-generation-carrying minor version; FR-008 "highest
+                               ; capability generation used to write" is reported as this field's value.
+document-class      = u16     ; NORMATIVE: FR-006; 0 = reserved/invalid, 1 = general document,
+                               ; 2-65535 reserved for future profile classes (e.g. a forms profile),
+                               ; MBZ in v1 beyond value 1; a reader MUST reject document-class = 0.
+capability-written  = u16     ; NORMATIVE: FR-008; highest capability generation the writer used.
+capability-required = u16     ; NORMATIVE: FR-009; lowest capability generation a reader must implement
+                               ; to render with no disposition applied. MUST be <= capability-written;
+                               ; violation is rejected naming BOTH values (FR-010, rule PD-CAPPAIR-001).
+durable-claim       = %x00 / %x01
+                               ; NORMATIVE: FR-011. 0 = non-durable, 1 = durable profile claimed. Any
+                               ; other octet value is rejected (rule PD-DURABLE-001). A durable-profile
+                               ; document MUST carry a Registry Excerpt resource (document.abnf S7).
+history-mode        = %x00 / %x01 / %x02
+                               ; NORMATIVE: CON-022, closed set. 0 = complete history, 1 = history
+                               ; retained from a declared point, 2 = no history. Immutable after
+                               ; creation (rule PD-MODE-001): a document attempting to change this
+                               ; value in a later state is rejected. Any other octet value is rejected.
+unicode-version-id  = u16     ; NORMATIVE: NFR-020; registry-issued identifier of the exact bound
+                               ; Unicode version. 0 = reserved/invalid.
+shaping-profile-id  = u16     ; NORMATIVE: CQ-006 option B; registry-issued identifier of the pinned,
+                               ; versioned external shaping algorithm this document was authored
+                               ; against. 0 = reserved/invalid; only meaningful when the document
+                               ; contains shaped text (CON-006 exception EX-001, see README.md).
+prefix-layout-id    = u64     ; NORMATIVE: identifies the shape of THIS prefix (S1-S4 below). v1 = 1.
+                               ; Reserved so a future major version may declare a differently-shaped
+                               ; prefix without perturbing format-major's own frozen [0,32) offsets.
+
+header-reserved     = 448OCTET
+                      ; NORMATIVE: offsets [32,480). MUST be all-zero (MBZ) on write. A reader MUST
+                      ; reject a header carrying a nonzero reserved octet (rule PD-HDRZERO-001): this
+                      ; closes the "silent skip of an unrecognised header extension" hole by construction
+                      ; -- header-level growth happens only via a new prefix-layout-id and a major
+                      ; version, never via a quietly-defined reserved octet.
+header-digest       = digest256
+                      ; offset [480,512). NORMATIVE: SHA-256 over header-octets[0,480). Verified before
+                      ; any other prefix field is trusted; mismatch is FR-104 (abort before decode,
+                      ; report expected and actual).
+
+
+; ============================================================================
+; 3. COMMIT RING -- offsets [512, 4096), 7 x 512-octet self-digesting slots
+; ============================================================================
+commit-ring         = 7ring-slot
+ring-slot           = ring-fields ring-reserved record-digest
+; NORMATIVE: ring-fields (284 octets) + ring-reserved (196 octets, MBZ) + record-digest (32 octets) = 512.
+; CONTRACTS-PHASE CORRECTION (see README.md "Corrections made to inherited artefacts"): an earlier pass
+; of this file claimed ring-fields = 316 octets and ring-reserved = 164 octets. Summing the 14 named
+; fields at their own stated widths (below) gives 284, not 316; the two numbers were never consistent
+; with each other, and 316 was never consistent with the outer 512-octet slot total either way. 284 is
+; the value actually produced by the per-field widths already committed to in this file and in
+; data-model.md; ring-reserved is widened to 196 octets to absorb the difference. No field width and no
+; field's presence changes; only the two totals and the reserved region's offset range are corrected.
+; A slot that has never been written is all-zero; an all-zero slot's record-digest will not verify
+; against an all-zero preimage under SHA-256, so it is unambiguously distinguishable from a written slot.
+
+ring-fields         = ring-magic sequence ledger-length ledger-root segment-count
+                      state-id-field frontmatter-digest segment-table-digest
+                      t-c-root parent-state-id retention-point compaction-generation
+                      index-route structure-digest
+; NORMATIVE: ring-fields totals 284 octets, laid out in this order:
+;   ring-magic(4) sequence(8) ledger-length(8) ledger-root(32) segment-count(2)
+;   state-id(32) frontmatter-digest(32) segment-table-digest(32) t-c-root(32)
+;   parent-state-id(32) retention-point(2) compaction-generation(4) index-route(32)
+;   structure-digest(32)
+; = 4+8+8+32+2+32+32+32+32+32+2+4+32+32 = 284.
+
+ring-magic          = %x50.44.52.31                 ; NORMATIVE: ASCII "PDR1", ring-slot self-identification
+sequence            = u64                           ; NORMATIVE: monotonically increasing per commit; see S3.1 for the winner rule
+ledger-length       = u64                           ; NORMATIVE: total file length at this commit, in octets, INCLUDING the prefix.
+                                                     ; Part of structure_digest's preimage (integrity.abnf S3); blocks truncation replay.
+ledger-root         = digest256                     ; NORMATIVE: T_S root at this commit (integrity.abnf S2)
+segment-count       = u16                           ; NORMATIVE: high-water-mark of used SegmentTableSlot ordinals at this commit (0..16384)
+state-id-field      = state-id                      ; NORMATIVE: FR-003; = T_C root at this commit (this ring slot's document state identity)
+frontmatter-digest  = digest256                     ; NORMATIVE: SHA-256 over the Frontmatter region's octets [4096,262144) at this commit
+segment-table-digest = digest256                    ; NORMATIVE: SHA-256 over the SegmentTable region's octets [262144,1048576) at this commit
+t-c-root            = digest256                     ; NORMATIVE: T_C root (integrity.abnf S2); this is the "IntegrityBlock" of README's
+                                                     ; resolved layout tension -- carried here, not in a disjoint region
+parent-state-id     = state-id                      ; NORMATIVE: FR-004; the immediately preceding state's state-id, or 32 zero octets
+                                                     ; for a document's first state
+retention-point     = u16                           ; NORMATIVE: CON-022/FR-060; segment ordinal at or after which history is retained;
+                                                     ; meaningful only when history-mode = 1 (retained-from-point); 0 when history-mode != 1
+compaction-generation = u32                         ; NORMATIVE: monotonic count of compaction events (full or partial) applied so far;
+                                                     ; diagnostic only, not itself security-load-bearing
+index-route         = 16u16
+                      ; NORMATIVE ("UnitIndexRoot" of README's resolved layout tension): a 16-bucket
+                      ; routing table, bucket b in [0,16) holds the SegmentTableSlot ordinal of the
+                      ; UNIT-INDEX-LEAF segment covering every unit-id whose first octet's high nibble
+                      ; equals b (i.e. bucket = unit-id[0] >> 4). Bucket value 0xFFFF means "no unit
+                      ; registered in this bucket yet". This is what makes FR-055's 3-dependent-read
+                      ; bound exact: read 1 = this prefix (gives the leaf segment's own offset/length
+                      ; via SegmentTable, since both live in the already-read prefix); read 2 = the
+                      ; leaf segment; read 3 = the unit itself. See document.abnf S8 for the leaf
+                      ; segment's own record shape (UnitIndexLeaf).
+structure-digest    = digest256                     ; NORMATIVE, CLARIFIED (see README.md S5.1): a CACHED, DEFAULT-
+                                                     ; COVERAGE computation of integrity.abnf S3.1's algorithm, computed
+                                                     ; with ALL 5 covered_prefix_regions_bitmask bits set and every
+                                                     ; currently-populated non-ATTEST segment ordinal treated as
+                                                     ; covered, as of the moment this ring record was written. This
+                                                     ; field is NOT signature-specific and is never itself trusted as
+                                                     ; authoritative by any verifier (same "cache, recompute to
+                                                     ; verify" status as ledger-root and t-c-root above); a SPECIFIC
+                                                     ; Signature's own structure_digest input to its signed_object
+                                                     ; (integrity.abnf S3.2) is independently and freshly recomputed
+                                                     ; per THAT signature's own, possibly narrower, coverage_descriptor,
+                                                     ; and MUST NOT be assumed equal to this field's value unless that
+                                                     ; signature's own mode is TOTAL. When integrity.abnf S3.1 item 3
+                                                     ; (bit RING_WINNER) includes this ring record's [0,480) octets in
+                                                     ; some OTHER signature's own structure_digest preimage, this field
+                                                     ; is absorbed as opaque bytes contributing to that hash input, not
+                                                     ; interpreted as a value in its own right at that point.
+
+ring-reserved       = 196OCTET      ; NORMATIVE: offsets within the slot [284,480). MBZ on write; a reader MUST
+                                     ; reject a slot with any nonzero reserved octet UNLESS that slot is not the
+                                     ; winning slot (S3.1) -- a losing slot's reserved octets are not validated,
+                                     ; consistent with losing slots being permanently, structurally uncovered by
+                                     ; any signature (integrity.abnf S4).
+record-digest       = digest256     ; offsets [480,512) within the slot. NORMATIVE: SHA-256 over this slot's
+                                     ; octets [0,480). Verified before any other ring-slot field is trusted.
+
+; ---- 3.1 Winner selection (NORMATIVE, not expressible as a grammar rule) --
+; A reader determines the CURRENT state by, over all 7 slots whose record-digest verifies AND whose
+; ledger-length does not exceed the actual file length: selecting the slot with the strictly highest
+; sequence value (rule PD-RING-001). If two verifying, length-consistent slots share the highest
+; sequence value, the file is rejected naming both slot indices (PD-RING-001) -- this is an INVALID
+; verdict, not an ambiguity a reader may resolve by precedence (non-negotiable #8, FR-105's spirit
+; applied to the ring). The 6 non-winning slots are permanently, structurally excluded from every
+; signature's coverable set (integrity.abnf S4) and are retained only so a writer killed mid-commit
+; (FR-117) leaves the file readable at exactly one complete state: either the pre-commit winner or the
+; post-commit winner, never a blend.
+
+
+; ============================================================================
+; 4. FRONTMATTER -- offsets [4096, 262144), PDL-TLV record type FRONTMATTER-META
+; ============================================================================
+; CONTRACTS-PHASE RESOLUTION (README.md "Resolved layout tensions"): unlike Header/CommitRing/
+; SegmentTable, Frontmatter's fields are inherently variable-length (a title string, a bounded-but-
+; variable preview raster, a variable retired-token list) and are stated in the architecture only as
+; "<=" ceilings, not fixed widths. This grammar therefore encodes Frontmatter as ONE PDL-TLV record
+; (record type FRONTMATTER-META, tag space private to this record type) rather than as a padded raw
+; struct. This does not admit a second normative representation of anything (CON-005): it is the SAME
+; PDL-TLV grammar already mandated for ledger segment frames, applied to one more fixed-offset region.
+; Reading it requires no image/font/graphics decoder construction and no read past octet 262144
+; (FR-051/053/054), so TR-006/007/008's zero-decode bounded-prefix property is preserved: walking a
+; PDL-TLV field's tag+length to skip to the next field is bookkeeping, not decoding.
+
+frontmatter         = frontmatter-record frontmatter-padding
+; NORMATIVE: frontmatter-record's encoded length MUST be <= 258048 octets (FRONTMATTER_LENGTH =
+; 262144 - 4096); frontmatter-padding is zero-fill to exactly 258048 octets total for the region.
+; A reader MUST NOT read past octet 262144 to interpret any frontmatter field (FR-051/053/054).
+
+frontmatter-record  = fm-preview-kind fm-preview-raster fm-preview-digest
+                      fm-source-snapshot fm-title fm-page-count fm-page-dimensions
+                      fm-language fm-colour-profile-id fm-retired-tokens
+                      fm-coverage-summary
+; NORMATIVE: fields are PDL-TLV (field-tag ascending 1..11 as listed); a reader MUST skip a tag in
+; 12..255 by its declared length (reserved tail for this record type's future growth, S5.3) and MUST
+; reject non-ascending or duplicate tags (PD-TLV-001).
+
+fm-preview-kind      = field  ; tag=1; field-value = %x01 (PLP-1) / %x02 (restricted-PNG profile, integrity.abnf
+                               ; does not define raster codecs; see document.abnf S7 for the RESOURCE payload-
+                               ; kind enum this value is drawn from). NORMATIVE: any other value is rejected.
+fm-preview-raster    = field  ; tag=2; field-value = the encoded preview raster, <= 131072 octets (FR-051).
+                               ; NORMATIVE: renders the first page at <= the stated maximum pixel dimensions.
+fm-preview-digest    = field  ; tag=3; field-value = digest256 over the complete input set the preview was
+                               ; rendered from (FR-052). NORMATIVE: mismatch at read time reports preview-stale
+                               ; (FR-053) rather than being displayed or re-derived within the bounded prefix.
+fm-source-snapshot   = field  ; tag=4; field-value <= 4096 octets; non-normative render-input snapshot (HC-009-
+                               ; equivalent: excluded from structure_digest's frontmatter_metadata_bytes, S below).
+fm-title             = field  ; tag=5; field-value = UTF-8 NFC text, title (FR-054), <= 4096 octets
+fm-page-count        = field  ; tag=6; field-value = varint, authored fixed-pagination page count (FR-054, FR-097)
+fm-page-dimensions   = field  ; tag=7; field-value = 2 x varint (width, height) in 1/914400-inch base units (CON-012)
+fm-language          = field  ; tag=8; field-value = BCP-47 tag octets, document-level language (FR-054)
+fm-colour-profile-id = field  ; tag=9; field-value = u16, registry-issued colour representation id (CON-014)
+fm-retired-tokens    = field  ; tag=10; field-value = plain-seq-of(ext-token), <= 16384 octets total (CON-020: the
+                               ; set of extension tokens this document has permanently retired; never reissued)
+fm-coverage-summary  = field  ; tag=11; field-value = plain-seq-of(coverage-summary-entry), NON-NORMATIVE mirror
+                               ; of the currently-present signatures' coverage (integrity.abnf S5); exists so
+                               ; TR-007 ("determine which stored units are covered" from the leading 1048576
+                               ; octets) is answerable without reading an ATTEST segment that may lie past the
+                               ; prefix. NORMATIVE: this field is a CACHE, digest-bound to the authoritative
+                               ; coverage_descriptor it mirrors (coverage-summary-entry carries that digest); a
+                               ; bounded-prefix consumer that cannot fetch the ATTEST segment MAY report the
+                               ; mirrored coverage as a determination but MUST NOT report it as a cryptographic
+                               ; verification (verification is never a bounded-prefix operation; see cli.md
+                               ; `verify`). A full reader detecting a mismatch between this mirror and the
+                               ; authoritative descriptor treats the mirror as stale, never authoritative.
+
+frontmatter-padding = *OCTET  ; NORMATIVE: zero-fill; length = 258048 - (encoded length of frontmatter-record)
+
+
+; ============================================================================
+; 5. SEGMENT TABLE -- offsets [262144, 1048576), 16384 x 48-octet raw slots
+; ============================================================================
+segment-table       = 16384segment-table-slot
+; NORMATIVE: SEGMENT_TABLE_LENGTH = 786432 = MAX_SEGMENTS(16384) x SLOT_WIDTH(48); this is the SOLE
+; inventory of stored units (CQ-007) -- no second, digest-keyed index exists anywhere in the format
+; (closes the FR-104/105 "two inventories disagree" attack class by never having a second one).
+
+segment-table-slot  = slot-segment-type slot-flags slot-offset slot-length slot-frame-count slot-digest
+; NORMATIVE: 1+1+6+6+2+32 = 48 octets exactly, ordinal = this slot's index in the table (0..16383).
+; NORMATIVE: an unused slot is all-zero (a normative constant, not uninitialised padding); slot-
+; segment-type = 0 unambiguously marks "unused" since 0 is reserved (S5.1) and never a real type.
+
+slot-segment-type   = %x00 / %x01 / %x02 / %x03 / %x04 / reserved-segment-type
+                      ; NORMATIVE: 0=unused/reserved, 1=CONTENT, 2=RESOURCE, 3=HISTORY, 4=ATTEST.
+                      ; See S5.1 for the reserved range 5-255 and the reject-don't-skip rule.
+reserved-segment-type = %x05-FF
+slot-flags          = OCTET   ; NORMATIVE: bit0 = coverage HINT only (never authoritative -- authoritative
+                               ; coverage is always the coverage_descriptor inside the covering signature,
+                               ; integrity.abnf S5); bits 1-7 reserved, MBZ, reader MUST reject nonzero.
+slot-offset         = u48     ; NORMATIVE: absolute file offset of this segment's first octet; MUST be >= 1048576
+slot-length         = u48     ; NORMATIVE: total octet length of this segment including its 64-octet segment-
+                               ; header and its trailing frame directory (S6.1); bounds-safe arithmetic (no
+                               ; overflow) MUST be checked before slot-offset+slot-length is used for any read
+slot-frame-count    = u16     ; NORMATIVE: number of frames in this segment; MUST satisfy
+                               ; slot-frame-count*48 + 32 <= slot-length - 64 (frame-directory fits, S6.1),
+                               ; checked with overflow-safe arithmetic before the directory offset is computed
+slot-digest         = digest256
+                      ; NORMATIVE: SHA-256 over this segment's complete octets [slot-offset, slot-offset +
+                      ; slot-length). MUST equal the segment's own trailing segment-self-digest (S6.1); a
+                      ; mismatch between these two independent copies is FR-104/105 -- abort before decode,
+                      ; reject, never select one over the other.
+
+
+; ============================================================================
+; 6. LEDGER SEGMENT FRAMING
+; ============================================================================
+segment             = segment-header *frame frame-directory
+; NORMATIVE: a segment is immutable once sealed (never rewritten in place) and single-typed: every frame
+; inside one segment belongs to record types valid for that segment's slot-segment-type (document.abnf
+; enumerates which record types are legal in CONTENT vs RESOURCE vs HISTORY; integrity.abnf enumerates
+; ATTEST's). A segment's frame count MUST equal its SegmentTableSlot.slot-frame-count exactly.
+
+; ---- 6.1 Segment header (64 octets) ----
+segment-header      = seg-magic seg-type seg-capability-gen seg-header-reserved seg-frame-count seg-payload-length seg-tail-reserved
+; NORMATIVE: 4+1+2+1+4+6+46 = 64 octets exactly.
+seg-magic           = %x50.44.53.31                 ; NORMATIVE: ASCII "PDS1", segment self-identification
+seg-type            = slot-segment-type              ; NORMATIVE: MUST equal the SegmentTableSlot.slot-segment-type that addresses this segment
+seg-capability-gen  = u16                            ; NORMATIVE: FR-008-scoped; the capability generation whose writer minted this segment
+seg-header-reserved = OCTET                          ; NORMATIVE: MBZ
+seg-frame-count     = u32                            ; NORMATIVE: MUST equal the corresponding SegmentTableSlot.slot-frame-count when
+                                                      ; widened; a segment with more than MAX_FRAMES_PER_SEGMENT=8192 frames is rejected
+seg-payload-length  = u48                            ; NORMATIVE: total octet length of the *frame region only (excludes header and directory)
+seg-tail-reserved   = 46OCTET                        ; NORMATIVE: MBZ on write; reserved for a future minor capability generation's
+                                                      ; per-segment metadata; a v1 reader MUST reject a nonzero octet here (no silent skip
+                                                      ; at the segment-header level -- unlike a PDL-TLV field, this region carries no
+                                                      ; length prefix of its own to skip by, so an unrecognised nonzero value here can
+                                                      ; only ever mean "a newer major or minor spec revision", never a safely-ignorable
+                                                      ; extension; genuine forward-compatible extension of segment metadata belongs in an
+                                                      ; EXT_ENVELOPE-wrapped frame instead, document.abnf S6)
+
+; ---- 6.2 Frames ----
+frame               = record
+; NORMATIVE: a frame's record-type schema is determined by seg-type plus the frame's OWN first field
+; (a 1-octet record-type discriminant, tag=0, present in every record type's schema at the same tag
+; number so a reader can dispatch before parsing the rest -- see document.abnf S1 and integrity.abnf S1
+; for the discriminant enumerations legal inside CONTENT/RESOURCE/HISTORY and ATTEST segments respectively).
+; A frame's total encoded length (discriminant + all fields) MUST NOT exceed MAX_DECODED_UNIT = 268435456
+; octets; a TEXT_BLOCK-discriminated frame is additionally capped at MAX_TEXT_UNIT_OCTETS = 65536 octets
+; (document.abnf S2), with an explicit continuation-link construct for logically longer text.
+
+; ---- 6.3 Frame directory (tail) ----
+frame-directory     = *frame-dir-entry segment-self-digest
+; NORMATIVE: *frame-dir-entry count = seg-frame-count entries of 48 octets each, followed by exactly one
+; trailing 32-octet segment-self-digest; total directory length = seg-frame-count*48 + 32, matching
+; SegmentTableSlot's own bounds check (S5).
+frame-dir-entry     = dir-discriminant dir-reserved dir-offset dir-length dir-digest
+                      ; NORMATIVE: 1+3+6+6+32 = 48 octets.
+dir-discriminant    = OCTET       ; NORMATIVE: copy of this frame's record-type discriminant, for a directory-only
+                                   ; scan that need not touch frame octets at all (a second bounded-cost inventory
+                                   ; hop, analogous to S5's segment-table-slot but scoped to one segment's frames)
+dir-reserved        = 3OCTET      ; NORMATIVE: MBZ
+dir-offset          = u48         ; NORMATIVE: offset of this frame relative to the start of the frame region (not the file)
+dir-length          = u48         ; NORMATIVE: this frame's total encoded octet length
+dir-digest          = digest256   ; NORMATIVE: SHA-256 over this frame's own octets
+segment-self-digest = digest256
+                      ; NORMATIVE: SHA-256 over (segment-header || every frame octet in frame order || every
+                      ; preceding frame-dir-entry). MUST equal this segment's SegmentTableSlot.slot-digest
+                      ; (S5); these are the two independent inventories FR-104/105 require to agree.
+
+
+; ============================================================================
+; 7. UNIT-INDEX LEAF SEGMENT (RESOURCE-typed; addressed via S3's index-route)
+; ============================================================================
+; NORMATIVE: a unit-index leaf is an ordinary RESOURCE-typed segment (S5) carrying exactly one frame
+; whose record type is UNIT-INDEX-LEAF (document.abnf S8 gives the full field list: a sorted-vec-of
+; (unit-id, absolute-offset u48, length u32, kind u16, digest256) tuples, sorted by unit-id's own
+; encoded octets). Placing its record shape in document.abnf keeps every content-addressing record
+; type in one file; this file only fixes HOW a leaf is located (S3's index-route) and HOW MANY
+; dependent reads that costs (exactly 3, FR-055), not what a leaf contains field-by-field.
+
+
+; ============================================================================
+; 8. LEDGER PLACEMENT FUNCTION (NORMATIVE, not a grammar rule)
+; ============================================================================
+; place(prior, no-op) = prior                          ; a no-op save issues zero writes (NFR-003)
+; place(prior, edit)  = append exactly one new segment (or exactly one new TEXT_BLOCK-capped-at-65536-
+;                       octet segment per touched text unit) PLUS patch a bounded set of fixed-width
+;                       PREFIX slots (the winning ring slot's successor, the touched SegmentTableSlot
+;                       entries, index-route buckets affected). Total write cost MUST NOT exceed
+;                       8*K + 262144 octets for a K-octet logical edit (NFR-008), for documents up to
+;                       1073741824 octets, and untouched extents' octets MUST be unchanged (FR-056).
+; place(BOTTOM, S)    = L*(S): full compaction / publish / migration; a total re-emission of state S as
+;                       a fresh file via canonical depth-first traversal (integrity.abnf S1). Explicit-
+;                       only, never invoked by an ordinary save (NFR-004); refused while any signature
+;                       is present.
+; partial_compact(prior) = as place(prior, no-op) for every segment ordinal named in ANY present
+;                       signature's covered_segment_ranges (integrity.abnf S5); segments and ordinals
+;                       named in NO signature's covered_segment_ranges MAY be relocated, coalesced or
+;                       reclaimed. Explicit-only, like full compaction, and permitted even while a
+;                       SUBSET-mode signature is present (unlike full compaction) because structure-
+;                       digest (integrity.abnf S3) is defined to be insensitive to an uncovered
+;                       segment's physical placement.
+
+
+; ============================================================================
+; S5. RESERVED IDENTIFIER RANGES (this file's own namespaces)
+; ============================================================================
+; ---- S5.1 slot-segment-type (1 octet, global, not per-record-type) --------
+;   0        reserved  : marks an unused SegmentTableSlot; never a real segment
+;   1        assigned  : CONTENT
+;   2        assigned  : RESOURCE
+;   3        assigned  : HISTORY
+;   4        assigned  : ATTEST
+;   5-255    reserved  : future MAJOR-version segment kinds only. NORMATIVE: a v1 reader MUST REJECT
+;             (not skip) any segment whose slot-segment-type falls in this range (rule PD-SEGTYPE-001).
+;             Segment-kind extensibility is deliberately NOT available to minor capability generations:
+;             a segment's type governs how T_S and T_C treat its digest and how coverage_descriptor
+;             partitions it (integrity.abnf S2, S5), which are exactly the properties CP-004/CQ-004's
+;             determinism audit and CON-005's one-representation rule require to be closed, not
+;             writer-extensible. New CONTENT-MODEL constructs use the extension envelope instead
+;             (document.abnf S6), which lives INSIDE a CONTENT segment's frames and needs no new
+;             segment-type at all.
+;
+; ---- S5.2 ext-token (8 octets: 4-octet owner-id + 4-octet owner-local-seq) --
+;   owner-id 0x00000000            reserved  : never assigned; marks an invalid/absent token
+;   owner-id 0x00000001-0x7FFFFFFF registered: issued by the Protodoc token registry (CON-020, CON-021);
+;                                              owner-local-seq is then also registry-tracked
+;   owner-id 0x80000000-0xFFFFFFFE owner-scoped: self-issued by the owner without a registry round trip
+;                                              (CON-020's "owner-scoped" tier); owner-local-seq is that
+;                                              owner's own responsibility to keep unique within itself
+;   owner-id 0xFFFFFFFF            reserved  : permanently-retired marker namespace; a token with this
+;                                              owner-id is never a live extension, only a tombstone
+;                                              record (CON-020: "a retired token never reissued")
+; NORMATIVE: no experimental or unregistered prefix exists anywhere in this space (CON-020); an owner-id
+; a reader does not recognise as registered is still well-formed (owner-scoped tokens need no registry
+; entry to be valid octets) but its extension_envelope payload is necessarily undecodable to that reader,
+; which is precisely the case the disposition mechanism (document.abnf S6) exists to make safe.
+;
+; ---- S5.3 field-tag reserved tails, per record type defined in this file --
+;   FRONTMATTER-META : tags 1-11 assigned (S4), tags 12-255 reserved for this record type's own future
+;                       fields; a reader unfamiliar with a tag in 12-255 MUST skip it via field-len and
+;                       MUST NOT reject solely for its presence (S0's field rule); document.abnf and
+;                       integrity.abnf each state their own record types' reserved tails independently,
+;                       since PDL-TLV tag scoping is per record type, never global (DP-002).

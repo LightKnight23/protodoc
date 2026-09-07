@@ -1,0 +1,660 @@
+; Protodoc Ledger (PDL) -- Content Model Grammar
+; ============================================================================
+; Spec:      specs/001-protodoc-format-core/spec.md (APPROVED)
+; Decisions: specs/001-protodoc-format-core/clarify.md CQ-001..CQ-012 (CLOSED)
+; Phase:     003-plan, Repair Set 2 architecture (see plan.md)
+; Formalism: ABNF (RFC 5234 core rules). Same formalism as container.abnf and
+;            integrity.abnf, for the same reason: the wire encoding is PDL-TLV,
+;            a bespoke closed grammar, not protobuf/CBOR/ASN.1 (see DP-002 and
+;            contracts/README.md). Every constraint ABNF cannot express is
+;            stated in a comment tagged NORMATIVE next to the field it binds.
+;
+; This file defines the record shapes carried as frames inside CONTENT,
+; RESOURCE and HISTORY segments (container.abnf S6): structure, identity-
+; bearing text, anchors, annotations, tables, notes, cross-references, the
+; extension envelope, embedded resources (rasters, font subsets, presentation
+; artefacts, registry excerpts, the unit-index leaf) and history operations.
+; Digest trees, the signature envelope, coverage descriptors, redaction
+; commitments, erasure records and long-term-validation evidence are defined
+; in contracts/integrity.abnf, which owns everything carried inside an ATTEST
+; segment. Container framing (header, commit ring, segment table, segment/
+; frame/frame-directory physical layout) is defined in contracts/container.abnf.
+;
+; Section 0's primitives are repeated byte-identically from container.abnf so
+; this file parses standalone, per that file's own stated convention.
+; ============================================================================
+
+; ---- 0. Shared primitives (identical in container.abnf and integrity.abnf) -
+u8            = OCTET                       ; NORMATIVE: 1 octet, value 0..255
+u16           = 2OCTET                      ; NORMATIVE: big-endian unsigned 16-bit integer
+u32           = 4OCTET                      ; NORMATIVE: big-endian unsigned 32-bit integer
+u48           = 6OCTET                      ; NORMATIVE: big-endian unsigned 48-bit integer
+u64           = 8OCTET                      ; NORMATIVE: big-endian unsigned 64-bit integer
+i64           = 8OCTET                      ; NORMATIVE: big-endian TWO'S COMPLEMENT signed 64-bit integer.
+                                             ; Used ONLY where a persisted geometric value may be negative
+                                             ; (page_geometry, S7.4); PDL-VARINT (below) is unsigned-only by
+                                             ; its own definition and is never stretched to carry a sign bit.
+digest256     = 32OCTET                     ; NORMATIVE: a SHA-256 output (crypto/sha256, stdlib); see integrity.abnf S2 for which preimage
+unit-id       = 16OCTET                     ; NORMATIVE: opaque content-unit identity (CON-008); alphabet = all 256 octet values;
+                                             ; equality is exact 16-octet comparison, no case-folding, no path/hierarchy semantics.
+                                             ; NORMATIVE (FR-023 extended): every unit-id MUST be minted by a CSPRNG (crypto/rand,
+                                             ; stdlib) carrying no actor, device, clock or session-derived value.
+state-id      = 32OCTET                     ; NORMATIVE: FR-003 document-state identifier; = the state's T_C_root (see integrity.abnf)
+ext-token     = 8OCTET                      ; NORMATIVE: registered/owner-scoped extension token; see container.abnf S5.2
+
+; PDL-VARINT: Bitcoin-CompactSize-style minimal-length integer (DP-002). Repeated from container.abnf.
+varint        = varint-u8 / varint-u16 / varint-u32 / varint-u64
+varint-u8     = %x00-FC                     ; NORMATIVE: value = the octet itself, range 0..252
+varint-u16    = %xFD 2OCTET                 ; NORMATIVE: value = big-endian u16 of the 2 trailing octets; reader MUST reject value <= 252
+varint-u32    = %xFE 4OCTET                 ; NORMATIVE: value = big-endian u32 of the 4 trailing octets; reader MUST reject value <= 65535
+varint-u64    = %xFF 8OCTET                 ; NORMATIVE: value = big-endian u64 of the 8 trailing octets; reader MUST reject value <= 4294967295
+
+; PDL-TLV generic field grammar. Repeated from container.abnf; see that file S0 for the full rationale.
+field         = field-tag field-len field-value
+field-tag     = OCTET                       ; NORMATIVE: scoped PER RECORD-TYPE SCHEMA; fields MUST appear in strictly
+                                             ; ascending field-tag order within one record instance; reader MUST reject
+                                             ; a record whose tags repeat or descend (rule PD-TLV-001); a record type
+                                             ; has at most 256 fields, ever (CON-009).
+field-len     = varint                      ; NORMATIVE: octet length of field-value, minimal PDL-VARINT encoding
+field-value   = *OCTET                      ; NORMATIVE: exactly field-len octets
+record        = *field                      ; NORMATIVE: terminated by the enclosing frame's declared length, never an in-band terminator
+
+; Sequence conventions, repeated from container.abnf S0.
+plain-seq-of-X    = varint *element-X       ; NORMATIVE: varint = element count, preserves authored/resolved order
+sorted-vec-of-X   = varint *element-X       ; NORMATIVE: as plain-seq-of-X, PLUS strict ascending unsigned byte-lexicographic
+                                             ; order over each element's full encoded octets (Go bytes.Compare semantics);
+                                             ; reader MUST reject equal-adjacent or descending-adjacent elements (PD-SORT-001)
+
+; NFC text primitive, used by every UTF-8 field in this file (CQ-009, CON-003).
+nfc-string    = varint *OCTET               ; NORMATIVE: varint = octet length, followed by exactly that many UTF-8 octets.
+                                             ; The octets MUST already be in Unicode Normalization Form C (NFC quick-check
+                                             ; passes) at the granularity stated on the field that uses this rule (per-run,
+                                             ; per-block, or per-metadata-value; CQ-009 scopes normalization per addressable
+                                             ; text segment, never over a concatenation of segments). A writer MUST reject
+                                             ; non-NFC input rather than renormalize it (CON-003); a reader MUST reject a
+                                             ; stored value that fails NFC quick-check (rule PD-NFC-002).
+
+
+; ============================================================================
+; 1. RECORD-TYPE DISCRIMINANT REGISTRY (tag=0 in every record, this file's half)
+; ============================================================================
+; NORMATIVE: every record defined in this file or in integrity.abnf begins with a 1-octet discriminant
+; at field-tag 0, read before any other field, so a reader can dispatch to the correct schema before
+; parsing the rest (container.abnf S6.2). The discriminant value space is GLOBAL and split by numeric
+; range between the two files so one byte value never means two different things depending on context:
+;
+;   0x00        reserved  : never a valid discriminant; catches an all-zero or corrupt frame
+;   0x01 - 0x3F assigned  : CONTENT / RESOURCE / HISTORY record types -- this file (document.abnf)
+;   0x40 - 0x7F assigned  : ATTEST record types -- contracts/integrity.abnf S1
+;   0x80 - 0xFE reserved  : future MAJOR-version record kinds only. A v1 reader MUST REJECT (not skip)
+;               any frame whose discriminant falls in this range (rule PD-DISC-001), for the identical
+;               reason slot-segment-type's 5-255 range is reject-not-skip (container.abnf S5.1): a
+;               record's discriminant governs which fields the digest trees and the merge classifier
+;               (S9 below) treat as position-claim, value-claim or delete, which is exactly the kind of
+;               property that must stay closed to writer extension, never opened via minor capability.
+;   0xFF        reserved  : never assigned; symmetric bookend to 0x00, avoids colliding with an
+;               all-ones erased-flash or overwritten-memory pattern being misread as a valid kind.
+;
+; This file's own assignments (0x01-0x3F):
+;   0x01  TEXT_BLOCK              legal in: CONTENT                          (S2)
+;   0x02  ANNOTATION              legal in: CONTENT                          (S3)
+;   0x03  TABLE                   legal in: CONTENT                          (S4)
+;   0x04  NOTE                    legal in: CONTENT                          (S5)
+;   0x05  CROSS_REFERENCE         legal in: CONTENT                          (S5)
+;   0x06  EXT_ENVELOPE            legal in: CONTENT, RESOURCE                (S6)
+;   0x07  RASTER_IMAGE            legal in: RESOURCE                         (S7.1)
+;   0x08  FONT_SUBSET             legal in: RESOURCE                         (S7.2)
+;   0x09  REGISTRY_EXCERPT        legal in: RESOURCE                         (S7.3)
+;   0x0A  UNIT_INDEX_LEAF         legal in: RESOURCE                         (S8)
+;   0x0B  HISTORY_OP_BATCH        legal in: HISTORY                          (S9)
+;   0x0C  PRESENTATION_ARTEFACT   legal in: RESOURCE                         (S7.4)
+;   0x0D  ERASURE_RECORD          legal in: HISTORY                         (shape: integrity.abnf S7.2)
+;               NORMATIVE (CQ-008): a HISTORY-typed segment's frames are retyped from HISTORY_OP_BATCH
+;               to ERASURE_RECORD, in place at the same ordinal, exactly when history_mode = NO_HISTORY
+;               (container.abnf S2's history-mode field) and a commit occurs; the segment's own
+;               SegmentTableSlot.slot-segment-type stays HISTORY throughout (only the frame discriminant
+;               inside it changes), so this is the one discriminant assigned in this file's own 0x01-
+;               0x3F range whose record shape is defined in integrity.abnf rather than here, because its
+;               content (a salted severance commitment) is a redaction-adjacent construct, not a
+;               structural or content-model one. Reserved here as a numeric assignment for completeness
+;               of this registry; not restated field-by-field in this file.
+;   0x0E - 0x3F reserved for future CONTENT/RESOURCE/HISTORY record kinds; v1 does not assign any of
+;               them. A v1 reader MUST REJECT a frame carrying one of these values (same PD-DISC-001
+;               rule as the 0x80-0xFE range; the two ranges are reserved for the same reason and differ
+;               only in which future version -- a v1.x capability generation versus a v2 major version
+;               -- is expected to eventually claim them. Neither is claimable by an ordinary extension
+;               envelope, which exists precisely so new CONTENT-MODEL constructs never need a new
+;               discriminant at all.)
+;
+; NORMATIVE: a segment whose SegmentTableSlot.slot-segment-type = CONTENT (1) MUST contain only frames
+; discriminated 0x01-0x06 (PRESENTATION_ARTEFACT, 0x0C, is RESOURCE-only, never legal in a CONTENT
+; segment); = RESOURCE (2) MUST contain only frames discriminated 0x06-0x0A or 0x0C; = HISTORY (3) MUST
+; contain only frames discriminated 0x0B (history_mode != NO_HISTORY) or 0x0D (history_mode =
+; NO_HISTORY, ERASURE_RECORD, shape in integrity.abnf S7.2), never a mix of the two within one segment.
+; A frame whose discriminant is well-formed but illegal for its enclosing segment's slot-segment-type is
+; rejected (this is a structural-well-formedness check, run at validation step 7 per data-model.md S7,
+; not a cycle or ceiling check).
+
+
+; ============================================================================
+; 2. TEXT_BLOCK AND RUN -- identity-bearing text (CQ-001, CQ-002, CQ-009, CON-001)
+; ============================================================================
+; NORMATIVE (CQ-001, CQ-002, HC-010, CON-001): a character's persisted identity is the pair
+; (run_id, base_ordinal + offset-within-run). No field anywhere in this file is a document-relative or
+; block-relative COUNTED position; the discriminating rule (A-FIELD-ROLE, research.md S4) is that a
+; persisted integer is a forbidden counted position if and only if its correct interpretation depends
+; on the stability of content OUTSIDE the single immutable value it indexes into. base_ordinal indexes
+; only into its own run's immutable, mint-time-fixed text and is therefore legal; a hypothetical
+; "character number N in the document" would depend on every character before it and is therefore
+; permanently absent from this grammar, in every record defined below.
+
+text-block          = tb-discriminant tb-block-id tb-language-ref tb-runs tb-continuation
+tb-discriminant     = %x01                          ; tag=0
+tb-block-id         = field                         ; tag=1; field-value = unit-id
+tb-language-ref     = field                         ; tag=2; field-value = u16, registry-issued BCP-47-mapping id, 0 = unset
+tb-runs             = field                         ; tag=3; field-value = plain-seq-of(run-element), >= 1 element;
+                                                     ; NORMATIVE: order is the run's own base_ordinal-ascending authored/
+                                                     ; resolved order, never re-sorted by byte value (this is a plain-seq,
+                                                     ; not a sorted-vec, precisely because run order is meaningful content,
+                                                     ; not an arbitrary key space).
+tb-continuation     = field                         ; tag=4; field-value = unit-id of the successor TEXT_BLOCK continuing
+                                                     ; this block's logical text past DP-009's 65536-octet ceiling, or
+                                                     ; zero16 (container.abnf S0) if this block is not continued.
+                                                     ; NORMATIVE: overflow past MAX_TEXT_UNIT_OCTETS is handled ONLY by
+                                                     ; this explicit link, never by silent truncation (DP-009).
+
+; ---- 2.1 Run (embedded element, not its own top-level record) -------------
+run-element         = run-id base-ordinal char-count props-ref lang-ref run-text
+run-id              = unit-id                       ; NORMATIVE (CQ-004 site #1): 128-bit CSPRNG, minted once per
+                                                     ; contiguous typing burst, never derived from actor, device, clock
+                                                     ; or session identity. A-FIELD-ROLE: IDENTITY-COMPONENT -- comparable
+                                                     ; and look-up-able, never usable for positional arithmetic.
+base-ordinal        = u32                           ; NORMATIVE: A-FIELD-ROLE: IDENTITY-COMPONENT. Split preserves run_id
+                                                     ; and shifts only base-ordinal on the successor fragment; merge is a
+                                                     ; pure syntactic predicate over two runs sharing run_id lineage with
+                                                     ; contiguous base-ordinal ranges (S9.4). NEVER used to compute "the
+                                                     ; Nth character of the document"; a reader MAY recompute a scalar
+                                                     ; document-relative position at read time for its own transient use,
+                                                     ; but MUST NOT persist that computed value anywhere (CON-001).
+char-count          = u32                           ; NORMATIVE: > 0; number of Unicode scalar values run-text encodes
+props-ref           = u8                            ; NORMATIVE: 0 = no formatting properties; 1-255 = registry/document-
+                                                     ; local property-set id (property-set records are outside this file's
+                                                     ; scope: a document-local property table is an ordinary opaque
+                                                     ; extension-envelope-carried construct unless a future major version
+                                                     ; assigns it a core discriminant)
+lang-ref            = u8                            ; NORMATIVE: 0 = inherit tb-language-ref; 1-255 = a run-local override,
+                                                     ; same registry space as tb-language-ref truncated to 8 bits
+run-text            = nfc-string                    ; NORMATIVE (PD-NFC-001): a run's stored text always starts at an
+                                                     ; NFC-legal boundary: no combining mark opens a run unless the
+                                                     ; immediately preceding run's own tail already isolates it (CQ-009).
+                                                     ; NORMATIVE: NFC is scoped PER RUN; concatenating two runs' run-text
+                                                     ; is NOT guaranteed to itself be NFC, and no reader may renormalize
+                                                     ; across the boundary to force it to be (CQ-009 resolution, option A).
+
+
+; ============================================================================
+; 3. ANNOTATION / RANGE -- durable anchors, no counted position (FR-025..FR-030)
+; ============================================================================
+annotation          = ann-discriminant ann-id ann-kind ann-start ann-end ann-body-block ann-orphan
+ann-discriminant    = %x02                          ; tag=0
+ann-id              = field                         ; tag=1; field-value = unit-id, the annotation's own opaque identity
+                                                     ; (NOT derived from its anchors, data-model.md S2.9)
+ann-kind            = field                         ; tag=2; field-value = ann-kind-value (u8, S10.1 registry)
+ann-start           = field                         ; tag=3; field-value = anchor-point (S3.1)
+ann-end             = field                         ; tag=4; field-value = anchor-point (S3.1)
+ann-body-block      = field                         ; tag=5; field-value = unit-id of a TEXT_BLOCK (S2) carrying the
+                                                     ; annotation's own text; NORMATIVE: this is an ORDINARY TextBlock,
+                                                     ; so concurrent edits to it resolve via R1 SEQUENCE-ORDER exactly
+                                                     ; like document body text (S9.2), never via a special annotation-
+                                                     ; text merge rule.
+ann-orphan          = field                         ; tag=6; field-value = orphan-record (S3.2), OR a zero-length value
+                                                     ; meaning "not orphaned"; NORMATIVE: populated at the moment the
+                                                     ; anchored range is deleted (R3 DELETE-DOMINATES, S9.5), never
+                                                     ; recomputed lazily at read time.
+
+; ---- 3.1 Anchor point (embedded structure, reused by Annotation, Note, CrossReference, ExtEnvelope) -
+; NORMATIVE: zero persisted counted positions anywhere in this structure (CQ-001, CQ-002, HC-010).
+anchor-point        = anchor-run-id anchor-birth-ordinal anchor-side anchor-boundary
+anchor-run-id       = unit-id                       ; A-FIELD-ROLE: IDENTITY-COMPONENT; the run this anchor was minted against
+anchor-birth-ordinal = u32                          ; A-FIELD-ROLE: IDENTITY-COMPONENT; the within-run offset at anchor-
+                                                     ; creation time, subject to the identical split/merge preservation
+                                                     ; rule as base-ordinal (S2.1); NEVER a document-relative count.
+anchor-side         = u8                            ; NORMATIVE: %x00 = before the indexed character, %x01 = after it;
+                                                     ; values %x02-%xFF are reserved and MUST be rejected (only 1 bit of
+                                                     ; information is defined; the field is a full octet so a future
+                                                     ; capability generation could widen the side model without changing
+                                                     ; this field's width, but v1 defines exactly 2 values).
+anchor-boundary     = u8                            ; NORMATIVE (FR-026, FR-027): exactly 4 closed values, declared
+                                                     ; independently per endpoint, preserved unmodified across save,
+                                                     ; load and merge:
+                                                     ;   0x00 = inside                      (the endpoint stays inside the range)
+                                                     ;   0x01 = outside                     (the endpoint stays outside the range)
+                                                     ;   0x02 = inside-if-inserted-before    (new text at this exact anchor point,
+                                                     ;                                        inserted before it, joins the range)
+                                                     ;   0x03 = inside-if-inserted-after     (symmetric, for insertion after)
+                                                     ; 0x04-0xFF are reserved and MUST be rejected (rule PD-BOUNDARY-001).
+
+; ---- 3.2 Orphan carriage (embedded structure) ------------------------------
+orphan-record       = orphan-author orphan-quoted orphan-prev orphan-next
+orphan-author       = u16                           ; NORMATIVE: populated only at orphaning time (data-model.md S2.9);
+                                                     ; a live (non-orphaned) annotation's authorship is carried by the
+                                                     ; identity apparatus of its ann-body-block's own runs, not duplicated
+                                                     ; here -- this field exists because orphaning removes the anchored
+                                                     ; range that apparatus depended on, so authorship must be captured
+                                                     ; explicitly at the moment it can no longer be recovered any other way.
+orphan-quoted       = nfc-string                    ; NORMATIVE: the anchored text as it read at orphaning time, frozen;
+                                                     ; participates in FR-078 octet-level redaction search if the
+                                                     ; orphaning range overlapped a later-redacted subtree.
+orphan-prev         = unit-id                       ; NORMATIVE: the nearest surviving unit-id before the orphaned range
+                                                     ; at orphaning time, or zero16 if none (container.abnf S0)
+orphan-next         = unit-id                       ; NORMATIVE: symmetric, the nearest surviving unit-id after
+
+
+; ============================================================================
+; 4. TABLE -- row/column structure (position-claims per S9.2; no shape given
+;    upstream beyond "table row/table-column insertion is a position-claim")
+; ============================================================================
+; PLAN-LEVEL DESIGN (flagged, see README.md "Fields this phase originated"): the architecture and its
+; sibling artefacts name tables only at the merge-classification level (row and column insertion are
+; R1 SEQUENCE-ORDER position-claims); no record shape for a table was given at any earlier phase. The
+; shape below is the minimum needed to make that classification concrete and to satisfy FR-108's
+; reference-resolution and FR-109's cycle-detection requirements over cell content. It reuses only
+; primitives already established elsewhere (unit-id ordering, plain-seq, TextBlock cell content).
+
+table               = tbl-discriminant tbl-id tbl-rows tbl-columns tbl-cells
+tbl-discriminant    = %x03                          ; tag=0
+tbl-id              = field                         ; tag=1; field-value = unit-id
+tbl-rows            = field                         ; tag=2; field-value = plain-seq-of(unit-id); row ids in current
+                                                     ; display order. NORMATIVE: row order is content (a plain-seq); row
+                                                     ; insertion is an R1 SEQUENCE-ORDER position-claim over this
+                                                     ; sequence (S9.2); a row's unit-id is minted once and outlives
+                                                     ; reordering, exactly like a run_id.
+tbl-columns         = field                         ; tag=3; field-value = plain-seq-of(unit-id); symmetric to tbl-rows
+tbl-cells           = field                         ; tag=4; field-value = plain-seq-of(cell-entry)
+
+cell-entry          = cell-row cell-col cell-content
+cell-row            = unit-id                       ; NORMATIVE (FR-108): MUST resolve to exactly one id currently present
+                                                     ; in the enclosing table's tbl-rows; a cell naming an absent row is
+                                                     ; rejected at validation, never clamped to the nearest row.
+cell-col            = unit-id                       ; NORMATIVE: symmetric, MUST resolve into tbl-columns
+cell-content        = unit-id                       ; NORMATIVE: the unit-id of a TEXT_BLOCK (S2) holding the cell's
+                                                     ; content; a cell's content is edited exactly like any other text
+                                                     ; block, R1 SEQUENCE-ORDER for concurrent insertions within it.
+
+
+; ============================================================================
+; 5. NOTE AND CROSS_REFERENCE
+; ============================================================================
+; PLAN-LEVEL DESIGN (flagged, same status as S4): neither record shape was given upstream beyond the
+; task's naming of "notes" and "references" as in-scope for this file and FR-108/FR-109's general
+; reference-resolution and cycle-detection requirements, which both records exist to satisfy concretely.
+
+note                = note-discriminant note-id note-anchor note-body-block note-placement
+note-discriminant   = %x04                          ; tag=0
+note-id             = field                         ; tag=1; field-value = unit-id
+note-anchor         = field                         ; tag=2; field-value = anchor-point (S3.1); a note anchors at a
+                                                     ; single point (anchor-boundary is present for shape uniformity
+                                                     ; with S3.1 but is NORMATIVE-ignored for a NOTE: a reader MUST NOT
+                                                     ; apply range-membership semantics to a note's anchor)
+note-body-block     = field                         ; tag=3; field-value = unit-id of a TEXT_BLOCK (S2), the note's own text
+note-placement      = field                         ; tag=4; field-value = u8: 0x00 = footnote, 0x01 = endnote;
+                                                     ; 0x02-0xFF reserved, MUST be rejected.
+
+cross-reference     = xref-discriminant xref-id xref-target xref-kind xref-anchor
+xref-discriminant   = %x05                          ; tag=0
+xref-id             = field                         ; tag=1; field-value = unit-id
+xref-target         = field                         ; tag=2; field-value = unit-id of the referenced unit.
+                                                     ; NORMATIVE (FR-108): MUST resolve to exactly one unit present in
+                                                     ; the document at validation time; a dangling or ambiguous target
+                                                     ; is rejected naming the offending value, never clamped or snapped.
+                                                     ; FLAGGED (see README.md "Fields this phase originated"):
+                                                     ; data-model.md S7 step 8 names exactly 5 cycle-detection edge
+                                                     ; kinds for FR-109 -- structural moves, extension-envelope
+                                                     ; fallback references (S6), annotation anchor references (S3),
+                                                     ; run split/merge lineage (S2.1), and RescindResignRecord chains
+                                                     ; (integrity.abnf S8) -- and a cross-reference edge (xref-id ->
+                                                     ; xref-target) is NOT one of them, even though FR-109's own
+                                                     ; literal text names "cross-references" as one of its 4 abstract
+                                                     ; graph categories. This contracts pass does NOT unilaterally
+                                                     ; expand data-model.md's already-committed list of 5 to 6 by
+                                                     ; adding this edge on its own authority; it records the gap here
+                                                     ; instead, since a chain of CROSS_REFERENCE targets pointing back
+                                                     ; on themselves is a structurally reachable case FR-108's own
+                                                     ; per-edge resolution check does not by itself exclude. FR-108's
+                                                     ; check (immediately above) still applies regardless: a target
+                                                     ; that fails to resolve to exactly one present unit is rejected
+                                                     ; whether or not it participates in a cycle.
+xref-kind           = field                         ; tag=3; field-value = u8: 0x00 = internal hyperlink,
+                                                     ; 0x01 = citation, 0x02 = table-of-contents entry;
+                                                     ; 0x03-0xFF reserved, MUST be rejected.
+xref-anchor         = field                         ; tag=4; field-value = anchor-point (S3.1), the reference's own
+                                                     ; source position; anchor-boundary is NORMATIVE-ignored, as for NOTE.
+
+
+; ============================================================================
+; 6. EXTENSION ENVELOPE -- the single forward-compatibility carrier (FR-012..FR-018, CON-005, CON-020, HC-013)
+; ============================================================================
+ext-envelope        = ext-discriminant ext-tok ext-payload-length ext-payload-ref ext-payload-digest
+                      ext-disposition ext-fallback-ref ext-position-key
+ext-discriminant    = %x06                          ; tag=0; legal in CONTENT and RESOURCE segments
+ext-tok             = field                         ; tag=1; field-value = ext-token; NORMATIVE (CON-020): partitioned
+                                                     ; registered / owner-scoped / permanently-retired per container.abnf
+                                                     ; S5.2; a retired token is never reissued (recorded in Frontmatter's
+                                                     ; fm-retired-tokens, container.abnf S4).
+ext-payload-length  = field                         ; tag=2; field-value = varint, total octet length of the payload
+                                                     ; stored at ext-payload-ref
+ext-payload-ref     = field                         ; tag=3; field-value = unit-id addressing a RESOURCE-typed segment
+                                                     ; holding the actual, opaque payload octets. NORMATIVE (CQ-007):
+                                                     ; content-addressed like every other resource; kept OUT of this
+                                                     ; record's own inline bytes (rather than embedded as a raw field-
+                                                     ; value) so an arbitrarily large unknown payload never forces this
+                                                     ; record itself past MAX_DECODED_UNIT, and so the same segment-level
+                                                     ; digest and dependent-read machinery already defined for every
+                                                     ; other resource (container.abnf S5, S7) applies unmodified here.
+ext-payload-digest  = field                         ; tag=4; field-value = digest256, SHA-256 over the payload octets.
+                                                     ; NORMATIVE: MUST equal the referenced segment's own SegmentTableSlot
+                                                     ; digest (container.abnf S5); a reader that does not implement
+                                                     ; ext-tok still verifies this digest and MUST reject a mismatch
+                                                     ; before applying any disposition (payload octets remain opaque;
+                                                     ; the digest check is the one thing every reader can always do).
+ext-disposition     = field                         ; tag=5; field-value = u8: 0x00 = ignore, 0x01 = degrade to
+                                                     ; ext-fallback-ref, 0x02 = refuse to render. NORMATIVE (FR-013,
+                                                     ; FR-014): exactly these 3 values; a missing or out-of-range
+                                                     ; disposition is a structural reject naming ext-tok, never a
+                                                     ; reader-chosen default; 0x03-0xFF reserved.
+ext-fallback-ref    = field                         ; tag=6; field-value = unit-id of a core-feature-set construct
+                                                     ; (any unit-id defined by a record type in this file) expressible
+                                                     ; entirely without this envelope, or zero16 (container.abnf S0).
+                                                     ; NORMATIVE: MANDATORY (non-zero16) when ext-disposition in
+                                                     ; {ignore, degrade}; validator rule PD-EXT-002 rejects a zero16
+                                                     ; fallback with either of those two dispositions. NORMATIVE: the
+                                                     ; fallback's reachability is audited (it must have no other live
+                                                     ; path into the document than as this envelope's fallback), closing
+                                                     ; the fallback/primary exclusion pair to a genuine, checked
+                                                     ; relationship rather than a declared-but-unverified role.
+ext-position-key    = field                         ; tag=7; field-value = anchor-point (S3.1), reused verbatim rather
+                                                     ; than inventing a third position-claim shape. NORMATIVE (DP-011):
+                                                     ; canonical order among unrecognised constructs at one position is
+                                                     ; (ext-tok, ext-position-key); insertion of an ExtensionEnvelope at
+                                                     ; a position is itself a position-claim, resolved via R1 SEQUENCE-
+                                                     ; ORDER (S9.2) identically to a text or table-row insertion.
+
+
+; ============================================================================
+; 7. RESOURCES -- RESOURCE-typed segment record kinds
+; ============================================================================
+
+; ---- 7.1 RASTER_IMAGE ------------------------------------------------------
+raster-image        = ri-discriminant ri-codec ri-width ri-height ri-pixel-octets
+ri-discriminant     = %x07                          ; tag=0
+ri-codec            = field                         ; tag=1; field-value = u8: 0x00 = restricted-PNG profile (lossless,
+                                                     ; CQ-010 option A's lossless leg), 0x01 = PLP-1 (lossy, bit-exact
+                                                     ; decode, CQ-010 option A's lossy leg); 0x02-0xFF reserved.
+ri-width            = field                         ; tag=2; field-value = varint, pixel width, > 0
+ri-height           = field                         ; tag=3; field-value = varint, pixel height, > 0
+ri-pixel-octets     = field                         ; tag=4; field-value = the encoded bitstream, opaque at this
+                                                     ; grammar's level of detail.
+                                                     ; NORMATIVE (CQ-010, HC-021): decode of ri-pixel-octets under the
+                                                     ; declared ri-codec MUST be bit-exact; for ri-codec=0x01 (PLP-1)
+                                                     ; this means: fixed 8x8 blocks with edge-replicate padding to a
+                                                     ; multiple of 8, exactly one of 8 normative fixed quantization
+                                                     ; matrices, fixed canonical-Huffman entropy tables (no per-image
+                                                     ; optimisation), DC-DPCM across blocks, an 8x8 integer IDCT
+                                                     ; specified as an exact integer-matrix-plus-fixed-point-shift
+                                                     ; schedule, fixed-point BT.601 YCbCr-to-RGB, 4:4:4 only (no chroma
+                                                     ; subsampling in v1), no loop filter, intra/single-image only.
+                                                     ; ONLY DECODE is bit-exact; the encoder that produces ri-pixel-
+                                                     ; octets is writer-discretionary (CQ-010's own text).
+                                                     ; SCOPE NOTE (flagged, not silently narrowed): the 8 fixed
+                                                     ; quantization matrices and the fixed canonical-Huffman code
+                                                     ; tables are named as concepts at this phase (plan.md DP-010) but
+                                                     ; their exact numeric coefficients and code lengths are NOT given
+                                                     ; anywhere in the materials available to this contracts pass.
+                                                     ; Fabricating ~512 quantization coefficients and a set of Huffman
+                                                     ; tables here, with no cited derivation and no way to check them
+                                                     ; against the two-implementation gate (CP-003), would itself be an
+                                                     ; unreviewed act of invention out of proportion to a wire-framing
+                                                     ; contract. This file fixes the FRAME (codec selector, dimensions,
+                                                     ; opaque bitstream field) exactly; PLP-1's own bitstream syntax
+                                                     ; (block layout, the 8 matrices, the Huffman tables, the IDCT
+                                                     ; shift schedule) belongs in a dedicated PLP-1 codec specification,
+                                                     ; to be produced and vector-tested before phase 6 implementation.
+
+; ---- 7.2 FONT_SUBSET --------------------------------------------------------
+font-subset         = fs-discriminant fs-font-octets
+fs-discriminant     = %x08                          ; tag=0
+fs-font-octets      = field                         ; tag=1; field-value = the subset-embedded font program's raw
+                                                     ; bytes, opaque. NORMATIVE (CQ-006, CP-005): a reader MUST NOT
+                                                     ; execute any instruction stream (hinting bytecode or otherwise)
+                                                     ; found in fs-font-octets; the only normative facts about a font
+                                                     ; are the 7 values recorded in font-record (S7.4.1), never
+                                                     ; anything computed by interpreting these octets as a program.
+                                                     ; NORMATIVE (CQ-007): this segment's own SegmentTableSlot digest
+                                                     ; (container.abnf S5) IS the font's content address; font-record's
+                                                     ; digest field is that same value, never a second, independently
+                                                     ; computed digest.
+
+; ---- 7.3 REGISTRY_EXCERPT ---------------------------------------------------
+registry-excerpt    = re-discriminant re-entries
+re-discriminant     = %x09                          ; tag=0
+re-entries          = field                         ; tag=1; field-value = plain-seq-of(registry-entry)
+registry-entry      = re-kind re-value re-spec-pointer re-snapshot-digest
+re-kind             = u8                            ; NORMATIVE: 0x00 = extension-token, 0x01 = shaping_profile_id,
+                                                     ; 0x02 = unicode_version_id; 0x03-0xFF reserved.
+re-value            = u16                           ; NORMATIVE: the external id value this entry excerpts
+re-spec-pointer     = nfc-string                    ; NORMATIVE: the registered meaning, or a stable pointer to the
+                                                     ; external specification text, as authored prose (not itself
+                                                     ; normative Protodoc grammar; a durable-profile reader MAY display
+                                                     ; it but MUST NOT execute or dereference it as a network location,
+                                                     ; CP-005)
+re-snapshot-digest  = digest256                     ; NORMATIVE: digest of the external registry's entry at the moment
+                                                     ; this excerpt was authored, so later registry drift is detectable
+                                                     ; NORMATIVE (FR-011): a document with fm-durable-claim (a Header
+                                                     ; field, container.abnf S2) = 1 MUST carry a REGISTRY_EXCERPT entry
+                                                     ; for every re-kind/re-value pair the document actually references
+                                                     ; (its unicode-version-id, its shaping-profile-id, and every
+                                                     ; ext-tok appearing in any ext-envelope); absence is a structural
+                                                     ; validation failure, distinct from every other verdict category
+                                                     ; (data-model.md S7, step 12). A non-durable-profile document MAY
+                                                     ; carry this record but is not required to.
+
+; ---- 7.4 PRESENTATION_ARTEFACT ----------------------------------------------
+; NORMATIVE: content-addressed like every other RESOURCE (CQ-007); a Signature (integrity.abnf S5)
+; carries only presentation_artefact_digest, a 32-octet pointer to this record's enclosing segment's own
+; SegmentTableSlot digest, never an inline copy. Bound directly into signed_object and therefore exempt
+; from staleness refusal relative to the document's current live state (FR-069): the artefact is not
+; recomputed as the document is edited, only ever read back and compared against what a signature named.
+presentation-artefact = pa-discriminant pa-profile-version pa-page-geometry pa-font-identity
+pa-discriminant     = %x0C                          ; tag=0
+pa-profile-version  = field                         ; tag=1; field-value = u16
+pa-page-geometry    = field                         ; tag=2; field-value = plain-seq-of(i64); every value an integer
+                                                     ; multiple of the 1/914400-inch base unit (CON-012); i64 (not
+                                                     ; varint) because a coordinate MAY be negative (an object placed
+                                                     ; partially off-page); order is authored order (page/axis order),
+                                                     ; never re-sorted.
+pa-font-identity    = field                         ; tag=3; field-value = plain-seq-of(font-record)
+
+; ---- 7.4.1 FontRecord (embedded element) -----------------------------------
+font-record         = fr-name fr-version fr-digest fr-axes fr-codepoints fr-features fr-embed-perm
+fr-name             = nfc-string                    ; the font's recorded name
+fr-version          = nfc-string                    ; opaque version token, writer-supplied text
+fr-digest           = digest256                     ; NORMATIVE: = the referencing FONT_SUBSET segment's own
+                                                     ; SegmentTableSlot.slot-digest (S7.2); the sole link to the actual
+                                                     ; font bytes; this record itself carries no font program bytes.
+fr-axes             = varint *i64                   ; NORMATIVE: varint = axis count, then that many i64 coordinate
+                                                     ; values; numeric variation axes only (CQ-006), no named-instance-
+                                                     ; by-label lookup.
+fr-codepoints       = varint *varint                ; NORMATIVE: varint = count, then that many varint-encoded Unicode
+                                                     ; scalar values (0..0x10FFFF each), the required code-point set.
+fr-features         = varint *u16                   ; NORMATIVE: varint = count, then that many u16 values. Each u16 is
+                                                     ; a REGISTRY-ISSUED shorthand for a 4-octet OpenType layout feature
+                                                     ; tag (e.g. "liga", "kern"), not the ASCII tag itself; the mapping
+                                                     ; from u16 to the actual 4-octet tag is pinned by the document's
+                                                     ; shaping-profile-id (Header field, container.abnf S2) exactly as
+                                                     ; CQ-006 option B requires, and is one of the id kinds a durable-
+                                                     ; profile document's REGISTRY_EXCERPT (S7.3) MUST excerpt.
+fr-embed-perm       = u8                            ; NORMATIVE: embedding-permission bitset; bit meanings are
+                                                     ; registry-defined per font-licensing convention, closed to the
+                                                     ; same 8 bits forever (widening this requires a major version,
+                                                     ; since it is a fixed-width field with no length prefix of its own
+                                                     ; to skip by).
+                                                     ; NORMATIVE (FR-089): a FontRecord has EXACTLY these 7 fields
+                                                     ; (fr-name, fr-version, fr-digest, fr-axes, fr-codepoints,
+                                                     ; fr-features, fr-embed-perm), no more and no fewer; the record
+                                                     ; shape is closed.
+
+
+; ============================================================================
+; 8. UNIT_INDEX_LEAF -- addressed via the winning CommitRingRecord's index-route (container.abnf S3)
+; ============================================================================
+unit-index-leaf     = uil-discriminant uil-entries
+uil-discriminant    = %x0A                          ; tag=0
+uil-entries         = field                         ; tag=1; field-value = sorted-vec-of(unit-index-entry), sorted by
+                                                     ; each entry's unit-id octets (S0's sorted-vec-of-X rule).
+                                                     ; NORMATIVE: every entry in this leaf carries a unit-id whose first
+                                                     ; octet's high nibble equals the bucket number that routed a reader
+                                                     ; to this segment (container.abnf S3's index-route); an entry
+                                                     ; violating this is a structural reject (misfiled-bucket, rule
+                                                     ; PD-INDEX-001), since it would mean two different leaves could
+                                                     ; legally claim to hold the same unit-id, reproducing the FR-104/
+                                                     ; FR-105 two-inventories-disagree class this index exists to avoid
+                                                     ; becoming a second one of.
+unit-index-entry    = uie-unit-id uie-offset uie-length uie-kind uie-reserved uie-digest
+uie-unit-id         = unit-id
+uie-offset          = u48                           ; NORMATIVE: absolute file offset; legal to store only because
+                                                     ; append-only guarantees an extent never moves once assigned an
+                                                     ; ordinal, except a PARTIAL COMPACTION's explicit, controlled
+                                                     ; reassignment of an uncovered ordinal (container.abnf S8), which
+                                                     ; MUST invalidate (by rewriting) every unit-index-entry pointing
+                                                     ; into the relocated segment as part of that same operation.
+uie-length          = u32                           ; NORMATIVE: content-unit length in octets, bounded by
+                                                     ; MAX_DECODED_UNIT = 268435456 (fits comfortably in u32)
+uie-kind            = u16                           ; NORMATIVE: registry-defined content-unit kind discriminant,
+                                                     ; independent of (but often correlated with) the enclosing
+                                                     ; segment's own record-type discriminant (S1)
+uie-reserved        = 4OCTET                        ; NORMATIVE: MBZ; reader MUST reject a nonzero value
+uie-digest          = digest256                     ; NORMATIVE: SHA-256 over the content unit's own canonical octets;
+                                                     ; this index is DERIVED and non-normative (data-model.md S4): it is
+                                                     ; verified against T_C on open, never itself the source of truth,
+                                                     ; and a reader MAY rebuild it from scratch instead of trusting a
+                                                     ; stored copy.
+
+
+; ============================================================================
+; 9. HISTORY_OP_BATCH -- operation log serving all 3 history_mode values (CQ-008, CON-022)
+; ============================================================================
+history-op-batch    = hob-discriminant hob-operations
+hob-discriminant    = %x0B                          ; tag=0; legal ONLY in a HISTORY-typed segment
+hob-operations      = field                         ; tag=1; field-value = plain-seq-of(operation-record).
+                                                     ; NORMATIVE: order is NOT re-sorted by byte value; a writer MUST
+                                                     ; emit operations in the DP-015 canonical order stated in S9.1-9.5
+                                                     ; below, and a reader validating this batch MUST confirm the
+                                                     ; stored order is a legal linearization under that same
+                                                     ; classification (every DISJOINT-COMMUTE pair may appear in either
+                                                     ; relative order; every R1/R2/R3-ordered pair MUST appear in the
+                                                     ; one order that classification produces) rather than re-deriving
+                                                     ; and rewriting the order itself.
+
+operation-record    = op-kind op-target op-predecessor op-order-key op-payload
+op-kind             = u8                            ; NORMATIVE (DP-015): exactly 3 values:
+                                                     ;   0x00 = SEQUENCE-POSITION-CLAIM (a position-claim: text run
+                                                     ;          insertion, table row/column insertion, extension-
+                                                     ;          envelope insertion, annotation creation)
+                                                     ;   0x01 = VALUE-CLAIM (a value-claim: property set, rename,
+                                                     ;          non-cycle move, resize)
+                                                     ;   0x02 = DELETE
+                                                     ; 0x03-0xFF reserved, MUST be rejected. NORMATIVE: every operation
+                                                     ; kind the data model can express is EXHAUSTIVELY one of these 3
+                                                     ; by construction (research.md S6); a fourth case is never reached.
+op-target           = unit-id                       ; the unit this operation acts on
+op-predecessor      = state-id                      ; NORMATIVE: the causally preceding state's state-id, forming a
+                                                     ; verifiable causal chain independent of any client clock
+op-order-key        = state-id                      ; NORMATIVE: = the authoring state_id; compared as unsigned
+                                                     ; big-endian octets. This is the R2 TOTAL-ORDER-TIEBREAK key
+                                                     ; (S9.3) and, for a SEQUENCE-POSITION-CLAIM op, also the tiebreak
+                                                     ; Fugue's own algorithm (S9.2) uses when its own causal ordering
+                                                     ; leaves two insertions at the identical anchor point otherwise
+                                                     ; unordered.
+op-payload          = varint *OCTET                 ; NORMATIVE: varint = octet length, then that many octets; the
+                                                     ; kind-specific payload (e.g. the inserted run-element for a
+                                                     ; SEQUENCE-POSITION-CLAIM on a TEXT_BLOCK, the new value for a
+                                                     ; VALUE-CLAIM). This grammar does not enumerate every op-target
+                                                     ; unit type's own payload shape past what S2-S7 already define as
+                                                     ; that unit's own record fields: an operation's payload is always
+                                                     ; encoded as a well-formed instance (or sub-field) of the target
+                                                     ; unit's own record type defined elsewhere in this file.
+
+; ---- 9.1 The exhaustive merge classification (NORMATIVE, not a grammar rule) -
+; Every pair of concurrent operations is resolved by exactly one of the following 4 cases. This is a
+; kind-based classification, not a per-pair table: because every operation is exhaustively a position-
+; claim, a value-claim or a delete (op-kind above), these 4 cases cover every pair among every operation
+; kind without enumerating pairs (research.md S6, HC-026).
+;
+; 9.2  R1 SEQUENCE-ORDER. Applies when EITHER concurrent operation is a SEQUENCE-POSITION-CLAIM
+;      targeting the same sequence (the same TextBlock's runs, the same Table's rows or columns, the
+;      same segment's extension-envelope siblings, or annotation creation within the same document).
+;      Resolved by Fugue's proven non-interleaving total order over that sequence; where Fugue's own
+;      causal order leaves two insertions at one anchor point unordered, op-order-key (compared as
+;      unsigned big-endian octets, smaller first) breaks the tie. NORMATIVE: this proof applies directly
+;      because each of these targets literally IS a sequence, not by analogy.
+; 9.3  R2 TOTAL-ORDER-TIEBREAK. Applies when two concurrent operations are VALUE-CLAIMs setting the
+;      SAME single-valued field of the SAME unit (a property, a rename, a non-cycle move, a resize).
+;      Resolved by comparing op-order-key as unsigned big-endian octets; the smaller value wins outright
+;      (the larger op is dropped, not merged field-by-field). This is the identical rule already used
+;      for structural move-cycle tie-breaking, applied uniformly.
+; 9.4  R3 DELETE-DOMINATES. Applies whenever a DELETE op-target coincides with any other operation's
+;      op-target. The delete always applies. The other operation's disposition is read from this fixed,
+;      closed, per-target-kind table, never invented ad hoc at merge time:
+;        target is a TEXT_BLOCK / run / table row or column / extension envelope : no-op (the concurrent
+;          operation is simply discarded; there is nothing left for it to act on)
+;        target is an ANNOTATION's anchored range (the range itself, not the annotation unit): the
+;          annotation is NOT deleted; its orphan-record (S3.2) is populated at this same commit
+;          (orphan-carry), preserving the annotation as a readable, deterministically resolved orphan
+;          rather than discarding it silently.
+; 9.5  DISJOINT-COMMUTE (the default, and the majority of real pairs). Applies whenever neither 9.2,
+;      9.3 nor 9.4 applies, i.e. the two operations target non-overlapping units or non-overlapping
+;      positions within one sequence. Both operations apply, in either relative order, with an
+;      identical resulting state either way.
+; A run split (S2.1) preserves run_id and only shifts base-ordinal on the successor fragment; a run
+; merge is legal only between a run and its immediate syntactic successor sharing run_id lineage with
+; contiguous base-ordinal ranges, never between arbitrary runs (this is a well-formedness rule on
+; run-element sequences, not itself one of the 4 merge cases above, since a split/merge is a writer-side
+; canonicalisation step applied to one actor's own runs, not a concurrent-operation resolution).
+
+
+; ============================================================================
+; S10. RESERVED IDENTIFIER RANGES (this file's own namespaces)
+; ============================================================================
+; ---- S10.1 ann-kind-value (1 octet, ANNOTATION's own tag=2 field) ----------
+;   0x00  comment
+;   0x01  suggested-insertion
+;   0x02  suggested-deletion
+;   0x03  bookmark
+;   0x04-0xFF reserved for a future major version; a v1 reader MUST reject an ann-kind-value outside
+;             0x00-0x03 (this governs redaction and merge disposition per-kind lookups, S9.4, so it is
+;             reject-not-skip like every other closed enum in this file).
+;
+; ---- S10.2 Field-tag reserved tails, per record type defined in this file --
+; Every record type above assigns its own field tags starting at 1 (tag 0 is always the shared
+; discriminant). Tags beyond the highest one a record type assigns, up to 255, are reserved for that
+; SAME record type's own future fields; PDL-TLV tag scoping is per record type, never global (DP-002,
+; container.abnf S0). A reader unfamiliar with a tag in a record type's reserved tail MUST skip it via
+; field-len (never reject solely for its presence); this is the ordinary PDL-TLV field rule (S0), not a
+; per-record exception. The highest tag assigned by each record type in this file, and therefore where
+; its reserved tail begins:
+;   TEXT_BLOCK            tags 1-4 assigned, 5-255 reserved
+;   ANNOTATION             tags 1-6 assigned, 7-255 reserved
+;   TABLE                  tags 1-4 assigned, 5-255 reserved
+;   NOTE                   tags 1-4 assigned, 5-255 reserved
+;   CROSS_REFERENCE        tags 1-4 assigned, 5-255 reserved
+;   EXT_ENVELOPE           tags 1-7 assigned, 8-255 reserved
+;   RASTER_IMAGE           tags 1-4 assigned, 5-255 reserved
+;   FONT_SUBSET            tag 1 assigned, 2-255 reserved
+;   REGISTRY_EXCERPT       tag 1 assigned, 2-255 reserved
+;   PRESENTATION_ARTEFACT  tags 1-3 assigned, 4-255 reserved
+;   UNIT_INDEX_LEAF        tag 1 assigned, 2-255 reserved
+;   HISTORY_OP_BATCH       tag 1 assigned, 2-255 reserved
+;
+; ---- S10.3 op-kind (1 octet, operation-record's own field) -----------------
+; See S9's op-kind definition inline; repeated here for completeness of this file's reserved-range index:
+;   0x00 SEQUENCE-POSITION-CLAIM, 0x01 VALUE-CLAIM, 0x02 DELETE, 0x03-0xFF reserved (reject).
