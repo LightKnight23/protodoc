@@ -1,6 +1,6 @@
 # Protodoc: Task Breakdown
 
-Status: DRAFT — awaiting approval by Eyvar | Spec ID: 001-protodoc-format-core | Phase: 4 (tasks) | Date: 2026-09-13
+Status: APPROVED — Eyvar, 2026-09-14 | Spec ID: 001-protodoc-format-core | Phase: 4 (tasks) | Date: 2026-09-13
 
 ---
 
