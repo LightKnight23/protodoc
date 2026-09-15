@@ -37,6 +37,32 @@ func DecodeDigest256(src []byte) (Digest256, int, error) {
 	return d, 32, nil
 }
 
+// maxUint48 is the largest value representable in 48 bits (2^48 - 1).
+const maxUint48 = 1<<48 - 1
+
+// AppendUint48 appends v's big-endian 48-bit encoding (6 octets) to dst,
+// per contracts/container.abnf: u48 = 6OCTET. It errors rather than
+// silently truncating when v exceeds the 48-bit range.
+func AppendUint48(dst []byte, v uint64) ([]byte, error) {
+	if v > maxUint48 {
+		return nil, fmt.Errorf("pdlfmt: u48 value %d exceeds 48-bit range", v)
+	}
+	return append(dst,
+		byte(v>>40), byte(v>>32), byte(v>>24),
+		byte(v>>16), byte(v>>8), byte(v)), nil
+}
+
+// DecodeUint48 decodes a fixed 6-octet big-endian u48 from the start of
+// src, returning the value and octets consumed (always 6 on success).
+func DecodeUint48(src []byte) (uint64, int, error) {
+	if len(src) < 6 {
+		return 0, 0, fmt.Errorf("pdlfmt: u48 needs 6 octets, got %d", len(src))
+	}
+	v := uint64(src[0])<<40 | uint64(src[1])<<32 | uint64(src[2])<<24 |
+		uint64(src[3])<<16 | uint64(src[4])<<8 | uint64(src[5])
+	return v, 6, nil
+}
+
 // AppendNFCString appends s's nfc-string encoding (varint octet length,
 // then that many UTF-8 octets) to dst, per contracts/document.abnf:
 // nfc-string = varint *OCTET. The caller is responsible for s already
