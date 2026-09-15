@@ -1,9 +1,7 @@
 // Package cli implements TR-012's Protodoc command-line tool: the verb
-// dispatch framework and the single stdout JSON envelope shape every verb
-// writes (contracts/cli.md S0). The full 8-value exit-code type and its
-// S1.1 precedence resolver are a separate task (T-0326) layered on top of
-// this framework; this file defines only the two exit codes the dispatch
-// framework itself can produce directly (cli.md S1's OK and USAGE).
+// dispatch framework, the shared 8-value exit-code precedence engine
+// (exitcode.go), and the single stdout JSON envelope shape every verb
+// writes (contracts/cli.md S0).
 package cli
 
 import (
@@ -12,8 +10,10 @@ import (
 	"io"
 )
 
-// The two exit codes reachable from dispatch itself, before T-0326's full
-// exit-code engine exists: cli.md S1's OK (0) and USAGE (7).
+// The two exit codes and status names the dispatch framework itself
+// produces directly (cli.md S1's OK and USAGE); exitcode.go's Status type
+// reuses these same values for its own StatusOK/StatusUsage entries so
+// there is exactly one definition of each, never two independent copies.
 const (
 	exitOK    = 0
 	exitUsage = 7
@@ -98,14 +98,12 @@ type Verb struct {
 func notImplemented(verb string) RunFunc {
 	return func(_ []string, stderr io.Writer) Result {
 		fmt.Fprintf(stderr, "protodoc %s: not yet implemented\n", verb)
-		return Result{
-			Status:   statusUsage,
-			ExitCode: exitUsage,
+		return StatusUsage.ToResult(Result{
 			Findings: []Finding{{
 				RuleID:  "TR-012",
 				Message: verb + " is not yet wired to its verb-specific package",
 			}},
-		}
+		})
 	}
 }
 
