@@ -5,6 +5,7 @@ package container
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"unicode/utf8"
@@ -89,14 +90,15 @@ var frontmatterKnownTags = map[byte]bool{
 // omits a field's tag entirely when its value is the zero value, and
 // Decode leaves a field at its zero value when the tag is absent.
 type Frontmatter struct {
-	PreviewKind   byte                  // tag=1, PreviewKindPLP1 or PreviewKindRestrictedPNG; 0 = absent (FR-051)
-	PreviewRaster []byte                // tag=2, <= FMPreviewRasterMaxSize octets, first-page render (FR-051)
-	PreviewDigest pdlfmt.Digest256      // tag=3, see ComputeFrontmatterPreviewDigest (FR-052); all-zero = absent
-	Title         string                // tag=5, UTF-8 NFC text, <= FMTitleMaxSize octets (FR-054)
-	PageCount     uint32                // tag=6, authored fixed-pagination page count (FR-054, FR-097)
-	PageWidth     pdlfmt.GeometricValue // tag=7, 1/914400-inch base units (CON-012)
-	PageHeight    pdlfmt.GeometricValue // tag=7
-	Language      string                // tag=8, BCP-47 tag octets (FR-054)
+	PreviewKind     byte                  // tag=1, PreviewKindPLP1 or PreviewKindRestrictedPNG; 0 = absent (FR-051)
+	PreviewRaster   []byte                // tag=2, <= FMPreviewRasterMaxSize octets, first-page render (FR-051)
+	PreviewDigest   pdlfmt.Digest256      // tag=3, see ComputeFrontmatterPreviewDigest (FR-052); all-zero = absent
+	Title           string                // tag=5, UTF-8 NFC text, <= FMTitleMaxSize octets (FR-054)
+	PageCount       uint32                // tag=6, authored fixed-pagination page count (FR-054, FR-097)
+	PageWidth       pdlfmt.GeometricValue // tag=7, 1/914400-inch base units (CON-012)
+	PageHeight      pdlfmt.GeometricValue // tag=7
+	Language        string                // tag=8, BCP-47 tag octets (FR-054)
+	ColourProfileID ColourProfileID       // tag=9, registry-issued colour representation id (CON-014); 0 = absent
 	// CoverageSummary is fm-coverage-summary (tag=11): a NON-NORMATIVE,
 	// digest-bound mirror of the currently-present signatures' coverage,
 	// so TR-007 is answerable from the bounded prefix alone (see coverage.go).
@@ -200,6 +202,11 @@ func (fm *Frontmatter) Encode(dst []byte) ([]byte, error) {
 			return nil, ErrFrontmatterInvalidUTF8
 		}
 		fields = append(fields, pdlfmt.Field{Tag: fmTagLanguage, Value: []byte(fm.Language)})
+	}
+	if fm.ColourProfileID != 0 {
+		var v [2]byte
+		binary.BigEndian.PutUint16(v[:], uint16(fm.ColourProfileID))
+		fields = append(fields, pdlfmt.Field{Tag: fmTagColourProfileID, Value: v[:]})
 	}
 	if len(fm.CoverageSummary) > 0 {
 		v, err := EncodeCoverageSummary(fm.CoverageSummary)
@@ -311,6 +318,11 @@ func DecodeFrontmatter(src []byte) (*Frontmatter, error) {
 				return nil, ErrFrontmatterInvalidUTF8
 			}
 			fm.Language = string(f.Value)
+		case fmTagColourProfileID:
+			if len(f.Value) != 2 {
+				return nil, fmt.Errorf("%w: fm-colour-profile-id is %d octets, want 2", ErrFrontmatterFieldSize, len(f.Value))
+			}
+			fm.ColourProfileID = ColourProfileID(binary.BigEndian.Uint16(f.Value))
 		case fmTagCoverageSummary:
 			entries, err := DecodeCoverageSummary(f.Value)
 			if err != nil {
