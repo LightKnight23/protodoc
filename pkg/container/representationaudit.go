@@ -36,7 +36,7 @@ type representationForm string
 
 const (
 	formInteger        representationForm = "integer"
-	formFloatingPoint  representationForm = "floating-point"  // forbidden: no float alongside a fixed-point/integer form (CON-005, CON-012)
+	formFloatingPoint  representationForm = "floating-point" // forbidden: no float alongside a fixed-point/integer form (CON-005, CON-012)
 	formSequence       representationForm = "sequence"
 	formAssociativeMap representationForm = "associative-map" // forbidden: no map alongside plain-seq-of-X/sorted-vec-of-X (CON-005)
 )
