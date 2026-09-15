@@ -3,27 +3,9 @@
 package container
 
 import (
-	"bytes"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 )
-
-// ringSlotDigestValid reports whether slot's stored record-digest (its
-// final 32 octets) matches SHA-256 recomputed over the slot's own
-// preceding 480 octets (contracts/container.abnf S3 record-digest
-// NORMATIVE comment: "Verified before any other ring-slot field is
-// trusted"). T-0009 promotes this check to a public, independently
-// tested capability (VerifyRingSlotDigest); SelectWinner uses it here to
-// determine PD-RING-001 eligibility.
-func ringSlotDigestValid(slot []byte) bool {
-	if len(slot) < RingSlotSize {
-		return false
-	}
-	slot = slot[:RingSlotSize]
-	got := sha256.Sum256(slot[:roRecordDigest])
-	return bytes.Equal(got[:], slot[roRecordDigest:RingSlotSize])
-}
 
 // ErrNoValidRingSlot is returned when no ring slot has both a verifying
 // record-digest and a ledger-length not exceeding the actual file length.
@@ -63,7 +45,7 @@ func SelectWinner(src []byte, fileLength uint64) (winner CommitRingRecord, index
 	var eligible []candidate
 	for i := 0; i < CommitRingSlots; i++ {
 		slot := src[i*RingSlotSize : (i+1)*RingSlotSize]
-		if !ringSlotDigestValid(slot) {
+		if !VerifyRingSlotDigest(slot) {
 			continue
 		}
 		rec, decErr := DecodeCommitRingRecord(slot)
