@@ -21,7 +21,15 @@ const (
 
 // Per-field octet ceilings named in data-model.md's ceiling table.
 const (
-	FMTitleMaxSize = 4096 // FR-054
+	FMTitleMaxSize         = 4096   // FR-054
+	FMPreviewRasterMaxSize = 131072 // FR-051
+)
+
+// Closed fm-preview-kind enum (contracts/container.abnf S4 fm-preview-kind
+// NORMATIVE comment): any other value is rejected.
+const (
+	PreviewKindPLP1          = 1
+	PreviewKindRestrictedPNG = 2
 )
 
 // Field tags within the FRONTMATTER-META PDL-TLV record (contracts/
@@ -30,7 +38,7 @@ const (
 // Go struct field yet (fmTagSourceSnapshot, fmTagColourProfileID,
 // fmTagRetiredTokens, fmTagCoverageSummary) are still part of this
 // already-frozen schema, not the reserved tail: DecodeFrontmatter accepts
-// them without error and a later task adds the Go field for each.
+// them without error, and a later task adds the Go field for each.
 const (
 	fmTagPreviewKind     = 1
 	fmTagPreviewRaster   = 2
@@ -80,11 +88,13 @@ var frontmatterKnownTags = map[byte]bool{
 // omits a field's tag entirely when its value is the zero value, and
 // Decode leaves a field at its zero value when the tag is absent.
 type Frontmatter struct {
-	Title      string // tag=5, UTF-8 NFC text, <= FMTitleMaxSize octets (FR-054)
-	PageCount  uint32 // tag=6, authored fixed-pagination page count (FR-054, FR-097)
-	PageWidth  int64  // tag=7, 1/914400-inch base units (CON-012); wrapped by a dedicated fixed-point type in a later task
-	PageHeight int64  // tag=7
-	Language   string // tag=8, BCP-47 tag octets (FR-054)
+	PreviewKind   byte   // tag=1, PreviewKindPLP1 or PreviewKindRestrictedPNG; 0 = absent (FR-051)
+	PreviewRaster []byte // tag=2, <= FMPreviewRasterMaxSize octets, first-page render (FR-051)
+	Title         string // tag=5, UTF-8 NFC text, <= FMTitleMaxSize octets (FR-054)
+	PageCount     uint32 // tag=6, authored fixed-pagination page count (FR-054, FR-097)
+	PageWidth     int64  // tag=7, 1/914400-inch base units (CON-012); wrapped by a dedicated fixed-point type in a later task
+	PageHeight    int64  // tag=7
+	Language      string // tag=8, BCP-47 tag octets (FR-054)
 }
 
 var (
@@ -98,6 +108,8 @@ var (
 	ErrFrontmatterInvalidUTF8 = errors.New("container: frontmatter text field is not valid UTF-8")
 	// ErrFrontmatterFieldSize is returned when a field's declared value violates its named ceiling or shape.
 	ErrFrontmatterFieldSize = errors.New("container: frontmatter field violates its size or shape constraint")
+	// ErrFrontmatterInvalidPreviewKind is returned when fm-preview-kind is outside the closed {1,2} enum.
+	ErrFrontmatterInvalidPreviewKind = errors.New("container: fm-preview-kind outside the closed {1,2} set")
 )
 
 // frontmatterRecordLength scans region (exactly FrontmatterRegionSize
@@ -137,6 +149,18 @@ func frontmatterRecordLength(region []byte) (int, error) {
 func (fm *Frontmatter) Encode(dst []byte) ([]byte, error) {
 	var fields []pdlfmt.Field
 
+	if fm.PreviewKind != 0 {
+		if fm.PreviewKind != PreviewKindPLP1 && fm.PreviewKind != PreviewKindRestrictedPNG {
+			return nil, ErrFrontmatterInvalidPreviewKind
+		}
+		fields = append(fields, pdlfmt.Field{Tag: fmTagPreviewKind, Value: []byte{fm.PreviewKind}})
+	}
+	if len(fm.PreviewRaster) > 0 {
+		if len(fm.PreviewRaster) > FMPreviewRasterMaxSize {
+			return nil, fmt.Errorf("%w: fm-preview-raster is %d octets, max %d", ErrFrontmatterFieldSize, len(fm.PreviewRaster), FMPreviewRasterMaxSize)
+		}
+		fields = append(fields, pdlfmt.Field{Tag: fmTagPreviewRaster, Value: fm.PreviewRaster})
+	}
 	if fm.Title != "" {
 		if !utf8.ValidString(fm.Title) {
 			return nil, ErrFrontmatterInvalidUTF8
@@ -212,6 +236,19 @@ func DecodeFrontmatter(src []byte) (*Frontmatter, error) {
 	fm := &Frontmatter{}
 	for _, f := range fields {
 		switch f.Tag {
+		case fmTagPreviewKind:
+			if len(f.Value) != 1 {
+				return nil, fmt.Errorf("%w: fm-preview-kind is %d octets, want 1", ErrFrontmatterFieldSize, len(f.Value))
+			}
+			if f.Value[0] != PreviewKindPLP1 && f.Value[0] != PreviewKindRestrictedPNG {
+				return nil, ErrFrontmatterInvalidPreviewKind
+			}
+			fm.PreviewKind = f.Value[0]
+		case fmTagPreviewRaster:
+			if len(f.Value) > FMPreviewRasterMaxSize {
+				return nil, fmt.Errorf("%w: fm-preview-raster is %d octets, max %d", ErrFrontmatterFieldSize, len(f.Value), FMPreviewRasterMaxSize)
+			}
+			fm.PreviewRaster = f.Value
 		case fmTagTitle:
 			if !utf8.Valid(f.Value) {
 				return nil, ErrFrontmatterInvalidUTF8

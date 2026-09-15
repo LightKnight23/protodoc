@@ -81,8 +81,9 @@ func TestDecodeFrontmatter_AllFieldsAbsentRoundTrips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodeFrontmatter: %v", err)
 	}
-	if *dec != (Frontmatter{}) {
-		t.Fatalf("decoded all-absent frontmatter = %+v, want zero value", *dec)
+	if dec.PreviewKind != 0 || len(dec.PreviewRaster) != 0 || dec.Title != "" ||
+		dec.PageCount != 0 || dec.PageWidth != 0 || dec.PageHeight != 0 || dec.Language != "" {
+		t.Fatalf("decoded all-absent frontmatter = %+v, want every field at its zero value", *dec)
 	}
 }
 
@@ -90,6 +91,59 @@ func TestDecodeFrontmatter_RejectsTruncatedRegion(t *testing.T) {
 	_, err := DecodeFrontmatter(make([]byte, FrontmatterRegionSize-1))
 	if err != ErrFrontmatterTruncated {
 		t.Fatalf("got %v, want ErrFrontmatterTruncated", err)
+	}
+}
+
+// TestFR_051_PreviewPayloadWithinBoundedPrefix is T-0012's named test.
+// Implements: FR-051.
+func TestFR_051_PreviewPayloadWithinBoundedPrefix(t *testing.T) {
+	fm := fixtureFrontmatter()
+	fm.PreviewKind = PreviewKindPLP1
+	fm.PreviewRaster = bytes.Repeat([]byte{0xAB}, FMPreviewRasterMaxSize) // maximum allowed size
+
+	enc, err := fm.Encode(nil)
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	if len(enc) != FrontmatterRegionSize {
+		t.Fatalf("encoded length = %d, want %d", len(enc), FrontmatterRegionSize)
+	}
+
+	dec, err := DecodeFrontmatter(enc)
+	if err != nil {
+		t.Fatalf("DecodeFrontmatter: %v", err)
+	}
+	if dec.PreviewKind != fm.PreviewKind {
+		t.Errorf("PreviewKind = %d, want %d", dec.PreviewKind, fm.PreviewKind)
+	}
+	if !bytes.Equal(dec.PreviewRaster, fm.PreviewRaster) {
+		t.Errorf("PreviewRaster round-trip mismatch, len got %d want %d", len(dec.PreviewRaster), len(fm.PreviewRaster))
+	}
+	// The other, already-covered fields must still round-trip unchanged.
+	if dec.Title != fm.Title || dec.PageCount != fm.PageCount || dec.Language != fm.Language {
+		t.Errorf("unrelated metadata fields changed: got %+v", dec)
+	}
+
+	reenc, err := dec.Encode(nil)
+	if err != nil {
+		t.Fatalf("re-Encode: %v", err)
+	}
+	if !bytes.Equal(reenc, enc) {
+		t.Fatal("re-encoded frontmatter octets differ from the original encoding")
+	}
+}
+
+func TestEncodeFrontmatter_RejectsOversizePreviewRaster(t *testing.T) {
+	fm := &Frontmatter{PreviewKind: PreviewKindPLP1, PreviewRaster: make([]byte, FMPreviewRasterMaxSize+1)}
+	if _, err := fm.Encode(nil); err == nil {
+		t.Fatal("Encode: want error for oversize fm-preview-raster, got nil")
+	}
+}
+
+func TestEncodeFrontmatter_RejectsInvalidPreviewKind(t *testing.T) {
+	fm := &Frontmatter{PreviewKind: 3}
+	if _, err := fm.Encode(nil); err != ErrFrontmatterInvalidPreviewKind {
+		t.Fatalf("Encode: got %v, want ErrFrontmatterInvalidPreviewKind", err)
 	}
 }
 
