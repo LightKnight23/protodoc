@@ -37,9 +37,9 @@ const (
 // container.abnf S4 frontmatter-record NORMATIVE comment: tags 1..11,
 // strictly ascending, reserved tail from 12). Tags with no corresponding
 // Go struct field yet (fmTagSourceSnapshot, fmTagColourProfileID,
-// fmTagRetiredTokens, fmTagCoverageSummary) are still part of this
-// already-frozen schema, not the reserved tail: DecodeFrontmatter accepts
-// them without error, and a later task adds the Go field for each.
+// fmTagRetiredTokens) are still part of this already-frozen schema, not the
+// reserved tail: DecodeFrontmatter accepts them without error, and a later
+// task adds the Go field for each.
 const (
 	fmTagPreviewKind     = 1
 	fmTagPreviewRaster   = 2
@@ -97,6 +97,10 @@ type Frontmatter struct {
 	PageWidth     int64            // tag=7, 1/914400-inch base units (CON-012); wrapped by a dedicated fixed-point type in a later task
 	PageHeight    int64            // tag=7
 	Language      string           // tag=8, BCP-47 tag octets (FR-054)
+	// CoverageSummary is fm-coverage-summary (tag=11): a NON-NORMATIVE,
+	// digest-bound mirror of the currently-present signatures' coverage,
+	// so TR-007 is answerable from the bounded prefix alone (see coverage.go).
+	CoverageSummary []CoverageSummaryEntry
 }
 
 var (
@@ -189,6 +193,13 @@ func (fm *Frontmatter) Encode(dst []byte) ([]byte, error) {
 			return nil, ErrFrontmatterInvalidUTF8
 		}
 		fields = append(fields, pdlfmt.Field{Tag: fmTagLanguage, Value: []byte(fm.Language)})
+	}
+	if len(fm.CoverageSummary) > 0 {
+		v, err := EncodeCoverageSummary(fm.CoverageSummary)
+		if err != nil {
+			return nil, fmt.Errorf("container: encoding fm-coverage-summary: %w", err)
+		}
+		fields = append(fields, pdlfmt.Field{Tag: fmTagCoverageSummary, Value: v})
 	}
 
 	record, err := pdlfmt.EncodeRecord(fields)
@@ -296,10 +307,16 @@ func DecodeFrontmatter(src []byte) (*Frontmatter, error) {
 				return nil, ErrFrontmatterInvalidUTF8
 			}
 			fm.Language = string(f.Value)
+		case fmTagCoverageSummary:
+			entries, err := DecodeCoverageSummary(f.Value)
+			if err != nil {
+				return nil, fmt.Errorf("container: fm-coverage-summary: %w", err)
+			}
+			fm.CoverageSummary = entries
 		default:
 			// A tag this package's struct does not yet model
-			// (fm-source-snapshot, fm-colour-profile-id, fm-retired-tokens,
-			// fm-coverage-summary): accepted per the schema, not surfaced.
+			// (fm-source-snapshot, fm-colour-profile-id, fm-retired-tokens):
+			// accepted per the schema, not surfaced.
 		}
 	}
 	return fm, nil
