@@ -44,6 +44,21 @@ const (
 // (FR-007): no writer may vary it.
 var Magic = [8]byte{'P', 'D', 'L', '1', 0, 0, 0, 0}
 
+// IsProtodocMagic reports whether data begins with the registered Protodoc
+// magic constant (FR-125). This is the format-identification pattern match
+// any consumer (an OS file-type sniffer, a MIME registration probe, a CLI)
+// uses to identify a Protodoc file from its leading octets alone, without
+// decoding the rest of the header — ahead of the eventual CON-026/CP-014
+// registry submission, which is a governance action outside this function's
+// scope. It is the sole magic-pattern check in this package (CP-008):
+// DecodeHeader calls it too, rather than repeating the comparison.
+func IsProtodocMagic(data []byte) bool {
+	if len(data) < len(Magic) {
+		return false
+	}
+	return bytes.Equal(data[:len(Magic)], Magic[:])
+}
+
 // HistoryMode is the closed 3-value history-retention enum (CON-022).
 type HistoryMode uint8
 
@@ -157,7 +172,7 @@ func DecodeHeader(src []byte) (*Header, error) {
 		return nil, fmt.Errorf("%w: expected %x, got %x", ErrHeaderDigestMismatch, wantDigest, gotDigest[:])
 	}
 
-	if !bytes.Equal(src[offMagic:offMagic+8], Magic[:]) {
+	if !IsProtodocMagic(src) {
 		return nil, fmt.Errorf("%w: got %x", ErrBadMagic, src[offMagic:offMagic+8])
 	}
 

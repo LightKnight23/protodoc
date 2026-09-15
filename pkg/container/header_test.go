@@ -136,6 +136,32 @@ func TestFR_011_DurableClaimReadFromHeader(t *testing.T) {
 	}
 }
 
+// TestFR_125_MagicConstantIdentification is T-0006's named test.
+// Implements: FR-125.
+func TestFR_125_MagicConstantIdentification(t *testing.T) {
+	valid := validHeader().Encode(nil)
+	if !IsProtodocMagic(valid) {
+		t.Error("IsProtodocMagic rejected a valid Protodoc file's leading octets")
+	}
+
+	nonMatching := make([]byte, HeaderSize)
+	copy(nonMatching, []byte("NOTAPDL1"))
+	if IsProtodocMagic(nonMatching) {
+		t.Error("IsProtodocMagic accepted a non-matching byte pattern")
+	}
+
+	tooShort := valid[:4]
+	if IsProtodocMagic(tooShort) {
+		t.Error("IsProtodocMagic accepted input shorter than the magic constant")
+	}
+
+	// The exact reserved octet sequence is one shared constant used by
+	// both writer (Encode) and reader (DecodeHeader/IsProtodocMagic).
+	if !bytes.Equal(valid[offMagic:offMagic+8], Magic[:]) {
+		t.Error("Encode did not write the shared Magic constant at offset 0")
+	}
+}
+
 func TestPD_DURABLE_001_RejectsInvalidOctet(t *testing.T) {
 	h := validHeader()
 	enc := h.Encode(nil)
