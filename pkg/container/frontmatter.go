@@ -89,14 +89,14 @@ var frontmatterKnownTags = map[byte]bool{
 // omits a field's tag entirely when its value is the zero value, and
 // Decode leaves a field at its zero value when the tag is absent.
 type Frontmatter struct {
-	PreviewKind   byte             // tag=1, PreviewKindPLP1 or PreviewKindRestrictedPNG; 0 = absent (FR-051)
-	PreviewRaster []byte           // tag=2, <= FMPreviewRasterMaxSize octets, first-page render (FR-051)
-	PreviewDigest pdlfmt.Digest256 // tag=3, see ComputeFrontmatterPreviewDigest (FR-052); all-zero = absent
-	Title         string           // tag=5, UTF-8 NFC text, <= FMTitleMaxSize octets (FR-054)
-	PageCount     uint32           // tag=6, authored fixed-pagination page count (FR-054, FR-097)
-	PageWidth     int64            // tag=7, 1/914400-inch base units (CON-012); wrapped by a dedicated fixed-point type in a later task
-	PageHeight    int64            // tag=7
-	Language      string           // tag=8, BCP-47 tag octets (FR-054)
+	PreviewKind   byte                  // tag=1, PreviewKindPLP1 or PreviewKindRestrictedPNG; 0 = absent (FR-051)
+	PreviewRaster []byte                // tag=2, <= FMPreviewRasterMaxSize octets, first-page render (FR-051)
+	PreviewDigest pdlfmt.Digest256      // tag=3, see ComputeFrontmatterPreviewDigest (FR-052); all-zero = absent
+	Title         string                // tag=5, UTF-8 NFC text, <= FMTitleMaxSize octets (FR-054)
+	PageCount     uint32                // tag=6, authored fixed-pagination page count (FR-054, FR-097)
+	PageWidth     pdlfmt.GeometricValue // tag=7, 1/914400-inch base units (CON-012)
+	PageHeight    pdlfmt.GeometricValue // tag=7
+	Language      string                // tag=8, BCP-47 tag octets (FR-054)
 	// CoverageSummary is fm-coverage-summary (tag=11): a NON-NORMATIVE,
 	// digest-bound mirror of the currently-present signatures' coverage,
 	// so TR-007 is answerable from the bounded prefix alone (see coverage.go).
@@ -184,8 +184,15 @@ func (fm *Frontmatter) Encode(dst []byte) ([]byte, error) {
 	}
 	if fm.PageWidth != 0 || fm.PageHeight != 0 {
 		var v []byte
-		v = pdlfmt.AppendVarint(v, uint64(fm.PageWidth))
-		v = pdlfmt.AppendVarint(v, uint64(fm.PageHeight))
+		var err error
+		v, err = pdlfmt.AppendGeometricValue(v, fm.PageWidth)
+		if err != nil {
+			return nil, fmt.Errorf("container: fm-page-dimensions width: %w", err)
+		}
+		v, err = pdlfmt.AppendGeometricValue(v, fm.PageHeight)
+		if err != nil {
+			return nil, fmt.Errorf("container: fm-page-dimensions height: %w", err)
+		}
 		fields = append(fields, pdlfmt.Field{Tag: fmTagPageDimensions, Value: v})
 	}
 	if fm.Language != "" {
@@ -289,19 +296,16 @@ func DecodeFrontmatter(src []byte) (*Frontmatter, error) {
 			}
 			fm.PageCount = uint32(v)
 		case fmTagPageDimensions:
-			w, n1, err := pdlfmt.DecodeVarint(f.Value)
+			w, n1, err := pdlfmt.DecodeGeometricValue(f.Value)
 			if err != nil {
 				return nil, fmt.Errorf("%w: fm-page-dimensions width: %v", ErrFrontmatterFieldSize, err)
 			}
-			h, n2, err := pdlfmt.DecodeVarint(f.Value[n1:])
+			h, n2, err := pdlfmt.DecodeGeometricValue(f.Value[n1:])
 			if err != nil || n1+n2 != len(f.Value) {
 				return nil, fmt.Errorf("%w: fm-page-dimensions malformed", ErrFrontmatterFieldSize)
 			}
-			if w > 0x7FFFFFFFFFFFFFFF || h > 0x7FFFFFFFFFFFFFFF {
-				return nil, fmt.Errorf("%w: fm-page-dimensions exceeds int64", ErrFrontmatterFieldSize)
-			}
-			fm.PageWidth = int64(w)
-			fm.PageHeight = int64(h)
+			fm.PageWidth = w
+			fm.PageHeight = h
 		case fmTagLanguage:
 			if !utf8.Valid(f.Value) {
 				return nil, ErrFrontmatterInvalidUTF8
