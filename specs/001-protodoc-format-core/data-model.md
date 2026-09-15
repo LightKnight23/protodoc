@@ -12,7 +12,7 @@ Every entity belongs to exactly one of six layers. An entity never spans layers;
 |---|---|---|
 | Container (prefix) | Content-independent identity, bounded-prefix determination, crash-atomic commit | Header, CommitRingRecord, Frontmatter, SegmentTableSlot |
 | Storage (ledger) | Append-only sealed segment bytes and their internal frame structure | Segment, PDL-VARINT (encoding primitive) |
-| Identity | Character-granular durable identity, run compression, anchors | TextBlock, Run, Annotation/Range |
+| Identity | Character-granular durable identity, run compression, anchors | TextBlock, Run, Annotation/Range, Table, Note, CrossReference |
 | Integrity | Structural digests, content commitment, redaction, signatures, longevity | T_C node, T_S node, CoverageDescriptor, Signature, RedactionCommitment, PresentationArtefact, FontRecord, RescindResignRecord, RegistryExcerpt |
 | History | Operation retention, erasure | HistorySegment, ErasureRecord |
 | Extensibility | Forward-compatible unknown-construct carriage with no reliance on encoding-level skip behaviour | ExtensionEnvelope |
@@ -61,14 +61,15 @@ Purpose: crash-atomic, self-digesting commit slot; the sole source of "current s
 | sequence | `uint64` | yes | monotonic per file | |
 | ledger_length | `uint64` | yes | `<= file length` | anti-truncation/rollback |
 | ledger_root | `[32]byte` | yes | T_S root at commit time | |
-| segment_count | `uint32` | yes | `<= 16384` | |
-| state_id | `[32]byte` | yes | CSPRNG or content-derived per DP-003/DP-015 usage | also the R2 tiebreak key |
+| segment_count | `uint16` | yes | `<= 16384` | corrected from `uint32`; container.abnf S3's ring-field arithmetic (14 fields summing to exactly 284 octets) only balances at `u16` |
+| state_id | `[32]byte` | yes | CSPRNG or content-derived per DP-003/DP-015 usage; container.abnf `state-id-field`, equals the T_C root per FR-003 | also the R2 tiebreak key |
 | frontmatter_digest | `[32]byte` | yes | | |
 | segment_table_digest | `[32]byte` | yes | | |
-| integrity_block_digest | `[32]byte` | yes | | |
+| integrity_block_digest | `[32]byte` | yes | container.abnf `t-c-root`; the T_C root as carried in the ring slot for signature binding (DP-013), a distinct wire position from `state_id` even though both equal the T_C root value | |
 | parent_state_id | `[32]byte` | yes | `0` for the root state | |
-| retention_point | `uint32` | yes | ordinal into HISTORY segments | CQ-008 |
+| retention_point | `uint16` | yes | ordinal into HISTORY segments | corrected from `uint32`, same arithmetic reason; CQ-008 |
 | compaction_generation | `uint32` | yes | monotonic, incremented by full or partial compaction | |
+| index_route | `[16]uint16` | yes | container.abnf `index-route`, 32 octets | 16-bucket routing table into `SegmentTableSlot` ordinals for `UnitIndex`; missing from an earlier draft of this table, already implemented by T-0042 |
 | structure_digest | `[32]byte` | yes | see §Integrity layer, `plan.md` DP-013 | |
 | record_digest | `[32]byte` | yes | `SHA-256(record_bytes[0,480))` | |
 
@@ -129,7 +130,7 @@ Invariants:
 
 Identity: slot ordinal (0..16383), the sole addressing key for physical storage.
 
-Limits: `MAX_SEGMENTS = 16384` slots x 48 octets = 786,432 octets, occupying `[262144,1048960)`.
+Limits: `MAX_SEGMENTS = 16384` slots x 48 octets = 786,432 octets, occupying `[262144,1048576)` (corrected from `1048960`, a typo: `262144 + 786432 = 1048576`, matching container.abnf's reconciled prefix total).
 
 ### 2.5 Segment
 
@@ -512,6 +513,72 @@ Identity: content-unit identity (16-octet opaque token).
 
 Limits: capacity `= MAX_CONTENT_UNITS = 1048576`.
 
+### 2.24 Table
+
+Purpose: a grid of cells tiling exactly once with no overlap and no gap (FR-082). Added at phase 5 (analyze):
+document.abnf S4 already assigns this record discriminant `0x03` and its field shape (`tbl-discriminant`,
+`tbl-id`, `tbl-rows`, `tbl-columns`, `tbl-cells`), but no entity table existed here for it before this fix.
+
+| Field | Type | Required | Constraint | Notes |
+|---|---|---|---|---|
+| tbl_id | unit-id | yes | | content-unit identity of the table itself |
+| tbl_rows | `[]unit-id` | yes | plain sequence, current document order | row ids |
+| tbl_columns | `[]unit-id` | yes | plain sequence, symmetric to `tbl_rows` | column ids |
+| tbl_cells | `[]cell-entry` | yes | each entry names `(cell_row, cell_col, content)` | `cell_row` and `cell_col` must each resolve into `tbl_rows`/`tbl_columns` respectively |
+
+Invariants:
+1. `tbl_cells` tiles the `tbl_rows` x `tbl_columns` grid exactly once: no two entries name the same `(cell_row, cell_col)` pair, and no `(row, col)` pair in range is left unnamed (FR-082).
+2. A `cell_entry` naming a row or column id absent from `tbl_rows`/`tbl_columns` is a structural reject.
+
+Identity: `tbl_id` (content-unit identity).
+
+Limits: `tbl_rows`/`tbl_columns` counts and `tbl_cells` count are each bounded by `MAX_REFERENCES = 4194304`.
+
+### 2.25 Note
+
+Purpose: a footnote or endnote, anchored to a point in the main text, carrying its own text block (FR-036-style
+structural placement). Added at phase 5 (analyze): document.abnf S5 already assigns discriminant `0x04` and the
+field shape (`note-discriminant`, `note-id`, `note-anchor`, `note-body-block`, `note-placement`), but no entity
+table existed here for it before this fix.
+
+| Field | Type | Required | Constraint | Notes |
+|---|---|---|---|---|
+| note_id | unit-id | yes | | content-unit identity of the note |
+| note_anchor | anchor-point (§3.1) | yes | | the point in the main text the note attaches to |
+| note_body_block | unit-id | yes | must resolve to a TextBlock (§2.7) | the note's own text |
+| note_placement | `uint8` (enum) | yes | `0x00` footnote, `0x01` endnote; `0x02-0xFF` reserved, rejected | |
+
+Invariants:
+1. `note_body_block` not resolving to a `TextBlock` is a structural reject (FR-108's reference-resolution rule).
+2. `note_placement` outside the closed two-value enum is a structural reject.
+
+Identity: `note_id` (content-unit identity).
+
+Limits: none beyond `MAX_CONTENT_UNITS` and `MAX_REFERENCES`.
+
+### 2.26 CrossReference
+
+Purpose: a reference to another content unit rendered via a named presentation function rather than frozen
+literal text (FR-084, FR-085). Added at phase 5 (analyze): document.abnf S5 already assigns discriminant `0x05`
+and the field shape (`xref-discriminant`, `xref-id`, `xref-target`, `xref-kind`, `xref-anchor`), but no entity
+table existed here for it before this fix.
+
+| Field | Type | Required | Constraint | Notes |
+|---|---|---|---|---|
+| xref_id | unit-id | yes | | content-unit identity of the cross-reference itself |
+| xref_target | unit-id | yes | must resolve to exactly one unit present in the document (FR-108) | the referenced unit |
+| xref_kind | `uint8` (enum) | yes | `0x00` internal hyperlink, others per document.abnf | selects the presentation function |
+| xref_anchor | anchor-point (§3.1) | yes | | the reference's own position in the main text |
+
+Invariants:
+1. `xref_target` not resolving to exactly one present unit is a structural reject (FR-108).
+2. `xref_target` is never a literal frozen string; staleness is determined without computing layout (FR-085).
+3. A `cross-reference` edge participates in FR-109's reference-graph cycle check as one of the 5 named edge kinds (integrity.abnf S8); `xref_id -> xref_target` forming a cycle with other named edges is a structural reject.
+
+Identity: `xref_id` (content-unit identity).
+
+Limits: none beyond `MAX_CONTENT_UNITS` and `MAX_REFERENCES`.
+
 ## 3. Relationships
 
 ```
@@ -640,6 +707,8 @@ Per CP-007, every structural limit is an exact decimal integer with a requiremen
 | NFR-026 extracting-and-validating implementer budget | 5 working days | NFR-026 |
 | NFR-027 rendering implementer budget | 30 working days (current estimate 28-49 days, at risk — see §7) | NFR-027 |
 | Negative corpus minimum | 200 hostile cases | CP-011 |
+| NFR-032 complete-history size overhead | 2.0x the size of the same visible content saved with no history | NFR-032 |
+| NFR-033 open/render time and memory bound | proportional to current content only; two documents with identical visible content and differing history bound within 1.5x of each other at 10x operation-count difference | NFR-033 |
 
 ## 6. Ordering rules
 

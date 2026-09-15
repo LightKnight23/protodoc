@@ -326,4 +326,35 @@ Checked against all 14 principles via the constitution-violations lens. Violatio
 
 ## 8. Gate verdict
 
-**DOES NOT PASS.** 0 orphan requirement(s) and 4 surviving blocker finding(s) must be closed before phase 6 can begin. See sections 5 and 6.
+**DOES NOT PASS (as originally run).** 0 orphan requirement(s) and 4 surviving blocker finding(s) had to be closed before phase 6 could begin. See sections 5 and 6 for the full original finding set. Section 9 below records what was fixed immediately afterward and what still blocks the gate.
+
+## 9. Post-analysis fixes applied
+
+Applied directly to `data-model.md` and `tasks.md` after this analysis ran, without waiting for a second full analyze pass, since each fix below is either purely mechanical or was independently re-verified (field-width arithmetic, dependency-cycle check, duplicate-id check) before being applied.
+
+**Blockers closed (3 of 4):**
+- CP-014 registration: added T-0371 (files the IANA media-type/format-identification registration), gated into T-0358's capstone decision.
+- Orphaned wire structures TABLE/NOTE/CROSS_REFERENCE: added `data-model.md` entities 2.24-2.26 and building tasks T-0367/T-0368/T-0369.
+- Orphaned REGISTRY_EXCERPT: added T-0370 (builds the wire struct, implements validation step 12 / cli.md's `registry_excerpt_completeness` check).
+
+**Blocker still open (1 of 4):**
+- CP-009 vs the pinned shaping-oracle construct (T-0252): no exception mechanism exists in CP-009's text or the amendment process. Requires a constitutional amendment or reopening CQ-006. Not something this pass can resolve unilaterally.
+
+**Major findings closed (5 of 7):**
+- CommitRingRecord field widths: `data-model.md` corrected `segment_count`/`retention_point` from `uint32` to `uint16`, and added the missing `index_route` field, matching container.abnf's ring-field arithmetic (verified: 4+8+8+32+2+32+32+32+32+32+2+4+32+32 = 284 exactly). Also clarified that `integrity_block_digest` already was container.abnf's `t-c-root` under a different name (a naming ambiguity, not a missing field) — this was caught and corrected before being shipped as a duplicate field.
+- M07-to-M08 dependency gap: M07's milestone-table dependency list now includes M08; T-0366 wires T-0131's T_S recomputation into the validate pipeline's `storage_integrity_tree` check. Verified no dependency cycle results (M08 does not depend on M07).
+- CP-004 RescindResignRecord: T-0304's description no longer claims a free-text "reason" or raw wall-clock "timestamp" field; data-model.md 2.18's actual entity never had either, so the fix was correcting the task's prose to match the already-approved wire shape rather than adding new fields.
+- CP-012 fuzzing governance: added T-0372 (names the triage owner, publishes the 90-day disclosure SLA), gated into T-0358.
+- CP-001 sequencing risk: T-0217 now depends on T-0190, so the provisional salted-commitment wire format's conformance freeze cannot complete ahead of clarify.md recording the FR-061/FR-075 ruling request.
+
+**Major findings still open (2 of 7):**
+- `PD-NORM-001` vs `PD-NFC-001`/`PD-NFC-002`: the same validator rule has two different ids across `spec.md` vs `contracts/document.abnf`/`data-model.md`. Needs a ruling on which is canonical before any conformance corpus cites either.
+- PageDirectory's missing wire discriminant (vs. sibling UnitIndexLeaf's `0x0A`): investigation during the fix pass found this is plausibly a legitimate asymmetry — PageDirectory is genuinely lazy-rebuilt and bounded by `MAX_PAGES`, unlike UnitIndex's role in NFR-012's extraction-budget — rather than an oversight. The existing M14 tasks (T-0242-244, T-0247) already correctly implement it as a derived, non-normative, digest-bound-for-staleness structure matching data-model.md 2.22's own existing (and correct) classification. Not mechanically fixed because forcing a discriminant assignment could itself be wrong; needs Eyvar's ruling on whether the asymmetry is intentional.
+
+**Minor findings: 1 of 2 closed, plus 1 confirmation needing no action:**
+- SegmentTableSlot arithmetic typo (`1048960` should be `1048576`): fixed.
+- NFR-032/NFR-033 ceiling-table rows: added.
+- CON-018 trial-coverage question (whether the combined NFR-026 extracting-and-validating trial satisfies both of CON-018's named roles' "own trial" obligation): still open, needs Eyvar/themis confirmation, recorded in `tasks.md` section 5.
+- The gap-a-verification finding required no action (it confirmed GAP A's fix was sound).
+
+**Remaining before this gate fully passes:** CP-009 (blocker), the `PD-NORM-001`/`PD-NFC-001` naming conflict, FR-061's own text-vs-provisional-form approval, PageDirectory's discriminant question, and CON-018's trial-coverage confirmation — five items, all requiring Eyvar's explicit ruling rather than further mechanical work.

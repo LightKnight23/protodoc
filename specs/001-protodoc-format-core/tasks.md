@@ -16,7 +16,7 @@ Per AD-002 (accepted deviation, `clarify.md`), all 197 requirements carry unifor
 | M04 | Identity & Anchor | M01, M02 | Run split/merge/move/reorder preserve run_id under fuzzing, no identifier is ever reissued, and orphan-carriage retains author/quoted-text/neighbours through the append-only ledger. |
 | M05 | Extraction | M01, M02, M04 | A 1 GiB/10,000-page document extracts streaming, abandonable, zero-trust-material within the NFR-012/013/014 octets-read/time/memory budgets, under 1000 lines per TR-011. |
 | M06 | Signature Primitive (EdDSA-Protodoc-1) | M01 | Signing one state twice with one key yields identical octets, and every allowlisted parameter set passes its vector suite while off-allowlist parameters are rejected. |
-| M07 | Structural Validation Core | M01, M02, M04 | Every named ceiling aborts pre-allocation at exactly its boundary, the first reference-graph cycle names every edge before ceiling checks run, and validator peak memory holds under NFR-030's adopted reading. |
+| M07 | Structural Validation Core | M01, M02, M04, M08 | Every named ceiling aborts pre-allocation at exactly its boundary, the first reference-graph cycle names every edge before ceiling checks run, validator peak memory holds under NFR-030's adopted reading, and the validate pipeline's reported `storage_integrity_tree` check recomputes T_S from M08. |
 | M08 | Integrity Trees (T_S/T_C) | M01, M02, M04, M06 | T_S and T_C (including ABSENT_CHILD_DIGEST and all 3 domain tags) recompute identically across two runs and change whenever any covered value changes. |
 | M09 | Signature & Coverage | M06, M08 | A signed state reports Valid only under its pinned presentation, a covered/uncovered split is enumerable via CoverageDescriptor, and verify never shows a signer identity alongside a non-valid verdict. |
 | M10 | Attestation Evidence & LTV | M09 | A signing instant outside the attested interval or a revocation at/before signing both present as unverified, and a nested time-attestation credential chain verifies independently. |
@@ -836,6 +836,9 @@ NFC-scoped text and CSPRNG-minted run/unit identity are the addressing scheme ev
 | T-0084 | Conformance: run_id uniqueness across document copy, fork, and branch | FR-019 | T-0067 | momus | `TestFR_019_IdentifierUniqueAcrossCopyForkBranch` (conformance) |
 | T-0085 | Fuzz: run_id preservation across split/merge/move/reorder/save/load/undo | FR-020 | T-0069, T-0070, T-0071 | prometheus | `TestFR_020_FuzzRunIDPreservationAcrossOperationSequence` (fuzz) |
 | T-0086 | Conformance: orphan-carriage survives append-only ledger reload | FR-027, FR-028, FR-029, FR-030 | T-0077, T-0080 | momus | `TestM04_OrphanCarriageSurvivesLedgerReload` (conformance) |
+| T-0367 | Build TABLE base record (data-model.md 2.24) | FR-082 | T-0067 | hephaestus | `TestFR_082_TableGridTilesExactlyOnce` (unit) |
+| T-0368 | Build NOTE base record (data-model.md 2.25) | FR-036 | T-0367 | hephaestus | `TestFR_036_NoteBodyBlockResolvesToTextBlock` (unit) |
+| T-0369 | Build CROSS_REFERENCE base record (data-model.md 2.26) | FR-084, FR-085 | T-0367 | hephaestus | `TestFR_084_CrossReferenceResolvesToOnePresentUnit` (unit) |
 
 **T-0067** Implement CSPRNG identity minting primitive (run_id/unit_id)
 
@@ -1036,6 +1039,36 @@ NFC-scoped text and CSPRNG-minted run/unit identity are the addressing scheme ev
 - **DoD:** The round-trip fixture (orphan -> save -> reload) shows zero-diff on all four FR-030 fields plus the FR-026/FR-027 boundary-behaviour value, checked into the conformance corpus.
 - **Test:** `TestM04_OrphanCarriageSurvivesLedgerReload` (conformance)
 - **Owner:** momus
+
+**T-0367** Build TABLE base record (data-model.md 2.24)
+
+> Added at phase 5 (analyze): document.abnf S4 already assigns TABLE's discriminant (`0x03`) and field shape (`tbl-discriminant`, `tbl-id`, `tbl-rows`, `tbl-columns`, `tbl-cells`), but no task built the base record before this fix, leaving M15's field-addition tasks (scope, tiling validator) with no base type to extend. Implement the TABLE record's encode/decode and the grid-tiling invariant: every cell resolves into `tbl-rows`/`tbl-columns`, no two cells name the same (row, col) pair, and no (row, col) pair in range is left unnamed.
+
+- **Implements:** FR-082
+- **Depends on:** T-0067
+- **DoD:** A table with M rows and N columns round-trips byte-exact; a cell naming a row or column absent from `tbl_rows`/`tbl_columns` is rejected; a fixture with a duplicated (row, col) pair and a fixture with an uncovered (row, col) pair are both rejected naming the offending cell.
+- **Test:** `TestFR_082_TableGridTilesExactlyOnce` (unit)
+- **Owner:** hephaestus
+
+**T-0368** Build NOTE base record (data-model.md 2.25)
+
+> Added at phase 5 (analyze): document.abnf S5 already assigns NOTE's discriminant (`0x04`) and field shape, but no task built it. Implement the NOTE record's encode/decode, its anchor-point binding, and the footnote/endnote placement enum.
+
+- **Implements:** FR-036
+- **Depends on:** T-0367
+- **DoD:** A NOTE round-trips byte-exact for both placement values; a `note_body_block` not resolving to a TextBlock is rejected; a `note_placement` value outside `{0x00, 0x01}` is rejected.
+- **Test:** `TestFR_036_NoteBodyBlockResolvesToTextBlock` (unit)
+- **Owner:** hephaestus
+
+**T-0369** Build CROSS_REFERENCE base record (data-model.md 2.26)
+
+> Added at phase 5 (analyze): document.abnf S5 already assigns CROSS_REFERENCE's discriminant (`0x05`) and field shape, but no task built it. Implement the record's encode/decode; `xref_target` participates in FR-109's reference-graph cycle check as one of the 5 named edge kinds (integrity.abnf S8).
+
+- **Implements:** FR-084, FR-085
+- **Depends on:** T-0367
+- **DoD:** A CROSS_REFERENCE round-trips byte-exact; an `xref_target` not resolving to exactly one present unit is rejected; staleness is determined without computing layout.
+- **Test:** `TestFR_084_CrossReferenceResolvesToOnePresentUnit` (unit)
+- **Owner:** hephaestus
 
 ---
 
@@ -1367,6 +1400,8 @@ The generated ceiling table and the validation pipeline's error-precedence/cycle
 | T-0128 | 13-step pipeline ordering golden corpus | FR-102, FR-103, FR-106, FR-108, FR-109, FR-110 | T-0113, T-0114, T-0115, T-0117, T-0118, T-0120 | momus | `TestM07_PipelineStepOrderingGoldenCorpus` (conformance) |
 | T-0360 | Document CON-017 enforcement rationale for phase-5 analyze inputs | CON-017 | T-0126 | clio | `TestCON_017_AnalyzeInputNotePresent` (unit) |
 | T-0361 | Record NFR-030 memory-floor disclosed-conflict ruling request in clarify.md | NFR-030 | T-0121 | clio | `TestNFR_030_ClarifyRulingRequestRecorded` (unit) |
+| T-0366 | Wire T_S recomputation into validate's storage_integrity_tree check | FR-104, FR-105 | T-0113, T-0131 | hephaestus | `TestFR_104_ValidateReportsStorageIntegrityTreeCheck` (integration) |
+| T-0370 | Build RegistryExcerpt wire struct and implement step-12 completeness check | FR-011 | T-0113, T-0117 | hephaestus | `TestFR_011_RegistryExcerptCompletenessStep12` (unit) |
 
 **T-0113** Validation pipeline orchestrator with error-precedence ordering
 
@@ -1547,6 +1582,26 @@ The generated ceiling table and the validation pipeline's error-precedence/cycle
 - **DoD:** clarify.md contains a new open-ruling-request entry for M07's NFR-030 floor-exempted reading, matching the format of the sibling entries, dated and cross-referencing plan.md Section 9 Conflict 3 and T-0121.
 - **Test:** `TestNFR_030_ClarifyRulingRequestRecorded` (unit)
 - **Owner:** clio
+
+**T-0366** Wire T_S recomputation into validate's storage_integrity_tree check
+
+> Added at phase 5 (analyze): cli.md's `validate` stdout schema names a required check key `storage_integrity_tree` (T_S recomputed and compared against CommitRingRecord.ledger_root, data-model.md S7 validation step 6), but M07's validate pipeline (T-0113) had no dependency path to M08's T_S builder (T-0131) to actually perform this check. Wire T-0131's `TSRoot()` into the pipeline: recompute T_S fresh and compare against `ledger_root`, reporting divergence as its own distinct verdict, never silently accepted.
+
+- **Implements:** FR-104, FR-105
+- **Depends on:** T-0113, T-0131
+- **DoD:** `validate`'s stdout report includes a `storage_integrity_tree` entry; a fixture with a tampered SegmentTableSlot digest reports this check as failed and names the offending slot; an untampered fixture reports it passed.
+- **Test:** `TestFR_104_ValidateReportsStorageIntegrityTreeCheck` (integration)
+- **Owner:** hephaestus
+
+**T-0370** Build RegistryExcerpt wire struct and implement step-12 completeness check
+
+> Added at phase 5 (analyze): data-model.md 2.19 and document.abnf S7.3 already fully specify RegistryExcerpt (discriminant `0x09`) and data-model.md S7 step 12 already documents the completeness rule, but no task built the wire struct or implemented the check before this fix. T-0005 explicitly deferred this ("not RegistryExcerpt content validation, owned by a later milestone") and T-0246 only wires RegistryExcerpt into font rendering for NFR-024, never the structural check.
+
+- **Implements:** FR-011
+- **Depends on:** T-0113, T-0117
+- **DoD:** RegistryExcerpt encodes/decodes byte-exact; a `durable_claim=1` document missing a RegistryExcerpt entry for a referenced external id fails validation step 12 naming the missing id, distinct from every earlier verdict category; `validate`'s stdout report includes the `registry_excerpt_completeness` check key per cli.md.
+- **Test:** `TestFR_011_RegistryExcerptCompletenessStep12` (unit)
+- **Owner:** hephaestus
 
 ---
 
@@ -2593,10 +2648,10 @@ HistorySegment reconstruction and retention-point gating need run/unit identity 
 
 **T-0217** Implement ErasureRecord wire shape (provisional salted-commitment form)
 
-> Implement ErasureRecord (data-model.md 2.17) using the provisional salted-commitment digest form per plan.md Section 9 Conflict 1, NOT FR-061's literal bare unsalted digest. Reuse the salted-commitment digest formula already built by M11 (T-0187) rather than reimplementing it independently. This is a disclosed, unresolved conflict (FR-061's literal text vs FR-075's 2^80 hiding-floor requirement) pending an explicit Eyvar/themis ruling before phase 5 (analyze) closes -- do not silently resolve by picking a side. Implement exactly the salted form plan.md proposes and record the open conflict in the record's doc comment.
+> Implement ErasureRecord (data-model.md 2.17) using the provisional salted-commitment digest form per plan.md Section 9 Conflict 1, NOT FR-061's literal bare unsalted digest. Reuse the salted-commitment digest formula already built by M11 (T-0187) rather than reimplementing it independently. This is a disclosed, unresolved conflict (FR-061's literal text vs FR-075's 2^80 hiding-floor requirement) pending an explicit Eyvar/themis ruling before phase 5 (analyze) closes -- do not silently resolve by picking a side. Implement exactly the salted form plan.md proposes and record the open conflict in the record's doc comment. Gated on T-0190 (analysis-phase finding: no task previously enforced that the ruling-request actually lands before this diverging wire format ships in the conformance corpus) so the conformance freeze cannot complete ahead of clarify.md recording the open ruling.
 
 - **Implements:** FR-061
-- **Depends on:** T-0209, T-0187
+- **Depends on:** T-0209, T-0187, T-0190
 - **DoD:** ErasureRecord encodes/decodes the salted-commitment form byte-exact per plan.md's Conflict-1 proposal, reusing M11's (T-0187) digest formula rather than a reimplementation; the doc comment and this task's test both cite the open FR-061/FR-075 conflict so it is not mistaken for a settled reading.
 - **Test:** `TestFR_061_ErasureRecordSaltedCommitmentForm` (unit)
 - **Owner:** mnemosyne
@@ -3592,11 +3647,11 @@ Refusal-first major-version migration and RESCIND-AND-RESIGN need a working vali
 
 **T-0304** Implement RESCIND-AND-RESIGN scheme-level break flow
 
-> Implement DP-017's RESCIND-AND-RESIGN mechanism as a migrate CLI flag (per cli.md/TR-012's design decision, not a 12th verb), invocable only at a major-version boundary: it rescinds a signature whose cryptographic scheme is considered broken and attaches a fresh signature under the current allowlisted parameter set, recording the rescission (old signature id, reason, timestamp) in a RescindResignRecord so the rescinded signature's historical verdict remains inspectable, never erased. This is the only invocation path (an explicit, operator-supplied flag), addressing the plan.md-disclosed absence of any self-triggering condition by design rather than by policy.
+> Implement DP-017's RESCIND-AND-RESIGN mechanism as a migrate CLI flag (per cli.md/TR-012's design decision, not a 12th verb), invocable only at a major-version boundary: it rescinds a signature whose cryptographic scheme is considered broken and attaches a fresh signature under the current allowlisted parameter set, recording `prior_signature_ref`, `new_param_set_id`, `new_signed_object`, `new_signature_value`, and `migration_state_id` in a RescindResignRecord (data-model.md 2.18) so the rescinded signature's historical verdict remains inspectable, never erased. This is the only invocation path (an explicit, operator-supplied flag), addressing the plan.md-disclosed absence of any self-triggering condition by design rather than by policy. Corrected at phase 5 (analyze): an earlier draft of this description named a free-text "reason" and a raw wall-clock "timestamp" that were never actually part of data-model.md's entity and would have violated CP-004 (only 4 non-deterministic sites permitted, none of them an ad hoc rescission timestamp) had they been added to the wire shape; this record carries none.
 
 - **Implements:** CON-016
 - **Depends on:** T-0302, T-0303
-- **DoD:** A document with a signature under a simulated broken-scheme flag, migrated with --rescind-and-resign, produces a document whose new signature verifies Valid under the current parameter set; its RescindResignRecord names the rescinded signature's original id and reason; the rescinded signature's own historical verdict remains queryable, not deleted; invoking the flag outside a major-version boundary is refused.
+- **DoD:** A document with a signature under a simulated broken-scheme flag, migrated with --rescind-and-resign, produces a document whose new signature verifies Valid under the current parameter set; its RescindResignRecord's five fields exactly match data-model.md 2.18 with no additional field; the rescinded signature's own historical verdict remains queryable, not deleted; invoking the flag outside a major-version boundary is refused.
 - **Test:** `TestCON_016_RescindAndResignAtMajorVersionBoundary` (integration)
 - **Owner:** argus
 
@@ -4047,8 +4102,10 @@ CP-003 (two independent implementations), CP-011 (corpus ships with prose), CP-0
 | T-0355 | Draft the irrevocable royalty-free licence with steward, succession, and deprecation-window policy | CON-026 | None | clio | `TestCON_026_LicenceDraftPublished` (integration) |
 | T-0356 | Record Eyvar's governance approval of the CON-026 licensing gate | CON-026 | T-0355 | clio | `TestCON_026_GovernanceGateApprovedAndOnRecord` (integration) |
 | T-0357 | Aggregate continuous-fuzzing harness maturity report across all fuzz targets (CP-012) | NFR-029 | None | prometheus | `TestNFR_029_FuzzHarnessMaturityMeetsCP012Bar` (fuzz) |
-| T-0358 | Capstone: record the v1-stable declaration go/no-go decision | NFR-025, NFR-026, NFR-027, NFR-028, NFR-029, CON-019, CON-026 | T-0344, T-0345, T-0347, T-0351, T-0353, T-0354, T-0356, T-0357, T-0044, T-0365 | clio | `TestM19_V1StableDeclarationGateRecorded` (integration) |
+| T-0358 | Capstone: record the v1-stable declaration go/no-go decision | NFR-025, NFR-026, NFR-027, NFR-028, NFR-029, CON-019, CON-026 | T-0344, T-0345, T-0347, T-0351, T-0353, T-0354, T-0356, T-0357, T-0044, T-0365, T-0371, T-0372 | clio | `TestM19_V1StableDeclarationGateRecorded` (integration) |
 | T-0365 | Record Eyvar's ruling on an NFR-026 external-trial budget miss | NFR-026 | T-0345 | clio | `TestNFR_026_TrialMissRulingRecorded` (integration) |
+| T-0371 | File IANA media-type and format-identification registration (CP-014) | FR-125 | T-0006 | clio | `TestFR_125_MediaTypeRegistrationOnRecord` (integration) |
+| T-0372 | Name fuzzing triage owner and publish 90-day disclosure SLA (CP-012) | None (see description) | T-0357, T-0359 | clio | `TestCP_012_TriageOwnerAndDisclosureSLAPublished` (integration) |
 
 **T-0342** Publish NFR-011 reference measurement configuration
 
@@ -4212,11 +4269,11 @@ CP-003 (two independent implementations), CP-011 (corpus ships with prose), CP-0
 
 **T-0358** Capstone: record the v1-stable declaration go/no-go decision
 
-> M19's exit criteria require all of: the CP-003 second-implementation match, full normative-statement-to-conformance-case coverage, and the licensing/stewardship/deprecation-window gate on record, before v1 is declared stable. Aggregate the results of every M19 gate task (role ceilings, both external trials plus any trial-miss rulings, the two-implementation conformance run, the traceability coverage audit, the feature register status, the licensing approval, and the fuzz-maturity report) into one decision document and get Eyvar's explicit go/no-go on declaring v1 stable, per CQ-012's own note that this gate 'blocks declaring v1 stable but not any individual coding task.'
+> M19's exit criteria require all of: the CP-003 second-implementation match, full normative-statement-to-conformance-case coverage, and the licensing/stewardship/deprecation-window gate on record, before v1 is declared stable. Aggregate the results of every M19 gate task (role ceilings, both external trials plus any trial-miss rulings, the two-implementation conformance run, the traceability coverage audit, the feature register status, the licensing approval, the fuzz-maturity report, the CP-014 media-type registration, and the CP-012 fuzzing-governance record) into one decision document and get Eyvar's explicit go/no-go on declaring v1 stable, per CQ-012's own note that this gate 'blocks declaring v1 stable but not any individual coding task.' Extended at phase 5 (analyze) to also gate on T-0371/T-0372: neither CP-014's registration nor CP-012's disclosure-clock governance had a task closing them before this fix, so v1-stable could previously have been declared with both silently missing.
 
 - **Implements:** NFR-025, NFR-026, NFR-027, NFR-028, NFR-029, CON-019, CON-026
-- **Depends on:** T-0344, T-0345, T-0347, T-0351, T-0353, T-0354, T-0356, T-0357, T-0044, T-0365
-- **DoD:** A single dated decision document lists the pass/fail state of every M19 gate (NFR-025..029, CON-019, CON-026) and carries Eyvar's explicit go/no-go signature for declaring v1 stable; a no-go records the specific blocking gate(s) and the follow-up task(s) that will close them.
+- **Depends on:** T-0344, T-0345, T-0347, T-0351, T-0353, T-0354, T-0356, T-0357, T-0044, T-0365, T-0371, T-0372
+- **DoD:** A single dated decision document lists the pass/fail state of every M19 gate (NFR-025..029, CON-019, CON-026, plus CP-014 registration and CP-012 disclosure-clock governance) and carries Eyvar's explicit go/no-go signature for declaring v1 stable; a no-go records the specific blocking gate(s) and the follow-up task(s) that will close them.
 - **Test:** `TestM19_V1StableDeclarationGateRecorded` (integration)
 - **Owner:** clio
 
@@ -4228,6 +4285,26 @@ CP-003 (two independent implementations), CP-011 (corpus ships with prose), CP-0
 - **Depends on:** T-0345
 - **DoD:** If T-0345 misses budget or fails corpus, Eyvar's ruling is recorded as a structured, dated entry (fields: date, decision-maker, decision, rationale) in plan.md Section 9 and specs/CHANGES.md; TestNFR_026_TrialMissRulingRecorded parses both files and asserts all four fields are present. If T-0345 passes within budget, this task is marked not-applicable with that reason logged in specs/CHANGES.md.
 - **Test:** `TestNFR_026_TrialMissRulingRecorded` (integration)
+- **Owner:** clio
+
+**T-0371** File IANA media-type and format-identification registration (CP-014)
+
+> Added at phase 5 (analyze): CP-014 requires media-type and format-identification registration filed before the first stable release, as its own v1 gate. T-0006 only built the in-repo magic-constant matcher; tasks.md's own residual-gaps section confirmed no task performed or tracked the actual external registration before this fix. File the IANA media-type application and any complementary format-identification registration (e.g. a PRONOM/file-signature registry entry) referencing T-0006's reserved magic constant.
+
+- **Implements:** FR-125
+- **Depends on:** T-0006
+- **DoD:** specs/CHANGES.md records a dated entry naming the filed registration(s), their submission date, and their reference/tracking id; TestFR_125_MediaTypeRegistrationOnRecord parses the entry and asserts it is present before T-0358's capstone gate can pass.
+- **Test:** `TestFR_125_MediaTypeRegistrationOnRecord` (integration)
+- **Owner:** clio
+
+**T-0372** Name fuzzing triage owner and publish 90-day disclosure SLA (CP-012)
+
+> Added at phase 5 (analyze): CP-012 requires "a named triage owner and a published maximum of 90 days from report to fix or advisory... before enrolment in any public fuzzing service." Every fuzz-related task (T-0047, T-0066, T-0085, T-0122, T-0150, T-0182, T-0198, T-0228, T-0265, T-0300, T-0357, T-0359) builds fuzzing infrastructure or aggregates crash-free/coverage metrics, but none established this governance precondition before this fix. Name the triage owner and publish the disclosure-clock policy before any public fuzzing-service enrolment.
+
+- **Implements:** None (see description; CP-012 is a constitution principle, not a spec.md FR/NFR/CON/TR id, matching the orphan-handling convention T-0359 already uses)
+- **Depends on:** T-0357, T-0359
+- **DoD:** GOVERNANCE.md (or a dedicated SECURITY.md) names a triage owner by role and publishes the 90-day report-to-fix-or-advisory disclosure clock; TestCP_012_TriageOwnerAndDisclosureSLAPublished parses the file and asserts both fields are present; no public fuzzing-service enrolment task may proceed without this task closed.
+- **Test:** `TestCP_012_TriageOwnerAndDisclosureSLAPublished` (integration)
 - **Owner:** clio
 
 ---
@@ -4245,13 +4322,28 @@ CP-003 (two independent implementations), CP-011 (corpus ships with prose), CP-0
 
 ## 5. Residual gaps
 
-- Three tasks carry empty implements arrays and are intentionally requirement-less, each justified in its own description: T-0359 (CP-012 continuous fuzz harness for untrusted-byte decode entry points), T-0097 (synthetic 1 GiB / 10,000-page benchmark corpus generator), T-0267 (governance task to obtain Eyvar/themis's design ruling on 8 missing accessibility/semantic mechanism fields, gating M15).
+RESOLVED at phase 5 (analyze), see `analysis.md` for the full record:
+- GAP A (M03's milestone-table dependency omitting M07) is corrected in section 1's table.
+- GAP B (stale pre-renumbering task-id references in description prose) is fully resolved: all 42 occurrences found were matched to their current `T-0NNN` id and patched into the affected descriptions. None remain.
+- CP-014's external media-type/format-identification registration now has a task (T-0371) tracking it, gated into T-0358's capstone decision.
+- The orphaned wire structures TABLE/NOTE/CROSS_REFERENCE (T-0367/T-0368/T-0369, with new data-model.md entities 2.24-2.26) and REGISTRY_EXCERPT (T-0370) now have building tasks.
+- The M07-to-M08 dependency gap for the `storage_integrity_tree` validate check is closed: M07's milestone table now depends on M08, and T-0366 wires T-0131's T_S recomputation into the validate pipeline.
+- T-0304's RescindResignRecord description previously claimed a free-text "reason" and a raw wall-clock "timestamp" that were never part of data-model.md 2.18's actual entity and would have been a CP-004 violation had they been added to the wire shape; the description now names only the entity's real five fields.
+- CP-012's fuzzing-governance precondition (a named triage owner and published 90-day disclosure SLA) now has a task (T-0372), gated into T-0358.
+- T-0217 now depends on T-0190 so the provisional salted-commitment wire format cannot finish its conformance freeze ahead of the FR-061/FR-075 ruling request landing in clarify.md.
+
+STILL OPEN, needing Eyvar's ruling before the affected work proceeds (see `analysis.md` section 6 for full detail):
+- CP-009 has no exception mechanism, but T-0252's shaping-oracle task requires one; needs a constitutional amendment or reopening CQ-006.
+- `PD-NORM-001` (spec.md) vs `PD-NFC-001`/`PD-NFC-002` (contracts/document.abnf, data-model.md) name the same rule two ways; needs a ruling on which is canonical.
+- FR-061's frozen text (bare unsalted digest) still conflicts with the provisional salted-commitment form T-0187/T-0217 build against; needs approval of the salted form (amending FR-061) or a hold on that work.
+- CON-018's three reader-conformance roles each need "their own trial" (CP-002), but only two trial tasks exist (T-0345 combined extracting-and-validating, T-0346 rendering); needs confirmation the combined trial satisfies both roles' obligation.
+- PageDirectory (data-model.md 2.22) has no assigned wire discriminant, unlike its sibling UnitIndexLeaf (0x0A) — plausibly a legitimate asymmetry (PageDirectory is genuinely lazy-rebuilt, bounded by MAX_PAGES, unlike UnitIndex's NFR-012 extraction-budget role) rather than a bug; needs a ruling on whether that asymmetry is intentional or PageDirectory should also get a discriminant.
+
+Not yet re-verified against the current file (accurate as of the pre-phase-5 task set, may already be addressed by the above):
 - Coverage concentration: FR-070 has 12 implementing tasks, FR-063 has 12, TR-012 has 15, FR-003 has 12 — verify these aren't double-billing the same work across split tasks vs. genuinely incremental build-up.
 - Argus/security-review tasks (T-0112, T-0183, T-0205, T-0306, T-0362, T-0363) sit as terminal nodes after all substantive tasks with no modeled downstream remediation task if review fails findings — rework path is implicit, not graphed.
-- CP-014 governance: FR-125's actual media-type/format-identification registry submission act (distinct from the in-repo magic-constant mechanism T-0006) has no task performing or tracking that external registration before v1-stable declaration.
 - Section 6 below records two findings the M18/M19 patch passes judged mis-attributed to the wrong task during renumbering (T-0347's dependency-graph finding referencing extraction-metadata concerns unrelated to its actual subject; T-0356's stale id-collision note against a pre-renumbering raw id with no live counterpart) — flagged there rather than silently applied, and worth a human sanity check before this file is treated as final.
-- M03 -> M07 is a real dependency at the task level (T-0056, T-0064 depend on M07's T-0118) that the milestone spine table in section 1 does not yet reflect (it lists M03 depending only on M01, M02) — the spine should be corrected to match before phase 5 (analyze) runs.
-- Known limitation: the id-renumbering pass that gave every task its final `T-0NNN` id remapped only structured fields (`id`, `depends_on_tasks`). It did not rewrite free-text mentions of sibling tasks inside `description` bodies, so a handful of tasks still say "see T-1103" or similar using a pre-renumbering raw id instead of the task's current id. Section 6 documents 5 confirmed old-to-new pairs found this way (e.g. raw T-1103 is now T-0187); at least 50 more such mentions remain unverified and were not blindly remapped, because a wrong guess would silently point a reader at an unrelated task, which is worse than a reference that is visibly broken. Any description containing a bare `T-` id outside the `T-0NNN` format should be treated as referring to a sibling task in the same or an adjacent milestone by subject matter, not by that literal id, until a human or a dedicated pass resolves it.
+- Four tasks carry empty implements arrays and are intentionally requirement-less, each justified in its own description: T-0359 (CP-012 continuous fuzz harness for untrusted-byte decode entry points), T-0097 (synthetic 1 GiB / 10,000-page benchmark corpus generator), T-0267 (governance task to obtain Eyvar/themis's design ruling on 8 missing accessibility/semantic mechanism fields, gating M15), T-0372 (CP-012 disclosure-clock governance, added at phase 5).
 
 ---
 
