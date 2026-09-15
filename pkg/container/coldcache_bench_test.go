@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"Protodoc/pkg/benchconfig"
 )
 
 // coldCachePreviewFixtureSize is the total file length NFR-015/016 name:
@@ -131,6 +133,8 @@ func BenchmarkNFR_015_ColdCachePreviewLatency(b *testing.B) {
 		timeBoundNFR015 = 300 * time.Millisecond
 		memBoundNFR016  = 67108864 // octets (NFR-016)
 	)
+
+	benchconfig.Stamp(b, "NFR-015, NFR-016")
 
 	path := buildColdCachePreviewFixture(b)
 	baselineRSS, rssSupported := peakRSSBytes()
