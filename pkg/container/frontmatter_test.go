@@ -147,6 +147,58 @@ func TestEncodeFrontmatter_RejectsInvalidPreviewKind(t *testing.T) {
 	}
 }
 
+// TestFR_052_PreviewDigestCoversRenderInputs is T-0013's named test.
+// Implements: FR-052.
+func TestFR_052_PreviewDigestCoversRenderInputs(t *testing.T) {
+	base := fixtureFrontmatter()
+	base.PreviewKind = PreviewKindPLP1
+	base.PreviewRaster = []byte{1, 2, 3}
+	baseDigest := ComputeFrontmatterPreviewDigest(base)
+
+	mutations := []struct {
+		name string
+		mut  func(*Frontmatter)
+	}{
+		{"title", func(fm *Frontmatter) { fm.Title = fm.Title + "!" }},
+		{"page count", func(fm *Frontmatter) { fm.PageCount++ }},
+		{"page width", func(fm *Frontmatter) { fm.PageWidth++ }},
+		{"page height", func(fm *Frontmatter) { fm.PageHeight++ }},
+		{"language", func(fm *Frontmatter) { fm.Language = "fr-FR" }},
+	}
+	for _, m := range mutations {
+		mutated := *base
+		m.mut(&mutated)
+		got := ComputeFrontmatterPreviewDigest(&mutated)
+		if got == baseDigest {
+			t.Errorf("mutating %s did not change fm-preview-digest", m.name)
+		}
+	}
+
+	// Mutating a NOT-in-window input (the preview raster/kind themselves)
+	// must NOT change the digest: FR-052's digest is documented as scoped
+	// to the in-window document_metadata subset only (plan.md Section 6's
+	// disclosed gap), not the preview payload itself.
+	outOfScope := *base
+	outOfScope.PreviewRaster = []byte{9, 9, 9}
+	outOfScope.PreviewKind = PreviewKindRestrictedPNG
+	if got := ComputeFrontmatterPreviewDigest(&outOfScope); got != baseDigest {
+		t.Errorf("mutating preview kind/raster changed fm-preview-digest; digest must cover only the in-window metadata fields")
+	}
+
+	base.PreviewDigest = baseDigest
+	enc, err := base.Encode(nil)
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	dec, err := DecodeFrontmatter(enc)
+	if err != nil {
+		t.Fatalf("DecodeFrontmatter: %v", err)
+	}
+	if dec.PreviewDigest != baseDigest {
+		t.Errorf("PreviewDigest round-trip = %x, want %x", dec.PreviewDigest, baseDigest)
+	}
+}
+
 func TestDecodeFrontmatter_RejectsNonzeroPadding(t *testing.T) {
 	fm := fixtureFrontmatter()
 	enc, err := fm.Encode(nil)

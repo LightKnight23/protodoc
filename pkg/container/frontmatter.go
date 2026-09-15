@@ -4,6 +4,7 @@
 package container
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"unicode/utf8"
@@ -88,13 +89,14 @@ var frontmatterKnownTags = map[byte]bool{
 // omits a field's tag entirely when its value is the zero value, and
 // Decode leaves a field at its zero value when the tag is absent.
 type Frontmatter struct {
-	PreviewKind   byte   // tag=1, PreviewKindPLP1 or PreviewKindRestrictedPNG; 0 = absent (FR-051)
-	PreviewRaster []byte // tag=2, <= FMPreviewRasterMaxSize octets, first-page render (FR-051)
-	Title         string // tag=5, UTF-8 NFC text, <= FMTitleMaxSize octets (FR-054)
-	PageCount     uint32 // tag=6, authored fixed-pagination page count (FR-054, FR-097)
-	PageWidth     int64  // tag=7, 1/914400-inch base units (CON-012); wrapped by a dedicated fixed-point type in a later task
-	PageHeight    int64  // tag=7
-	Language      string // tag=8, BCP-47 tag octets (FR-054)
+	PreviewKind   byte             // tag=1, PreviewKindPLP1 or PreviewKindRestrictedPNG; 0 = absent (FR-051)
+	PreviewRaster []byte           // tag=2, <= FMPreviewRasterMaxSize octets, first-page render (FR-051)
+	PreviewDigest pdlfmt.Digest256 // tag=3, see ComputeFrontmatterPreviewDigest (FR-052); all-zero = absent
+	Title         string           // tag=5, UTF-8 NFC text, <= FMTitleMaxSize octets (FR-054)
+	PageCount     uint32           // tag=6, authored fixed-pagination page count (FR-054, FR-097)
+	PageWidth     int64            // tag=7, 1/914400-inch base units (CON-012); wrapped by a dedicated fixed-point type in a later task
+	PageHeight    int64            // tag=7
+	Language      string           // tag=8, BCP-47 tag octets (FR-054)
 }
 
 var (
@@ -160,6 +162,9 @@ func (fm *Frontmatter) Encode(dst []byte) ([]byte, error) {
 			return nil, fmt.Errorf("%w: fm-preview-raster is %d octets, max %d", ErrFrontmatterFieldSize, len(fm.PreviewRaster), FMPreviewRasterMaxSize)
 		}
 		fields = append(fields, pdlfmt.Field{Tag: fmTagPreviewRaster, Value: fm.PreviewRaster})
+	}
+	if fm.PreviewDigest != (pdlfmt.Digest256{}) {
+		fields = append(fields, pdlfmt.Field{Tag: fmTagPreviewDigest, Value: fm.PreviewDigest[:]})
 	}
 	if fm.Title != "" {
 		if !utf8.ValidString(fm.Title) {
@@ -249,6 +254,12 @@ func DecodeFrontmatter(src []byte) (*Frontmatter, error) {
 				return nil, fmt.Errorf("%w: fm-preview-raster is %d octets, max %d", ErrFrontmatterFieldSize, len(f.Value), FMPreviewRasterMaxSize)
 			}
 			fm.PreviewRaster = f.Value
+		case fmTagPreviewDigest:
+			d, n, err := pdlfmt.DecodeDigest256(f.Value)
+			if err != nil || n != len(f.Value) {
+				return nil, fmt.Errorf("%w: fm-preview-digest is %d octets, want 32", ErrFrontmatterFieldSize, len(f.Value))
+			}
+			fm.PreviewDigest = d
 		case fmTagTitle:
 			if !utf8.Valid(f.Value) {
 				return nil, ErrFrontmatterInvalidUTF8
@@ -286,10 +297,38 @@ func DecodeFrontmatter(src []byte) (*Frontmatter, error) {
 			}
 			fm.Language = string(f.Value)
 		default:
-			// A tag this package's struct does not yet model (preview
-			// fields, source-snapshot, colour-profile-id, retired-tokens,
-			// coverage-summary): accepted per the schema, not surfaced.
+			// A tag this package's struct does not yet model
+			// (fm-source-snapshot, fm-colour-profile-id, fm-retired-tokens,
+			// fm-coverage-summary): accepted per the schema, not surfaced.
 		}
 	}
 	return fm, nil
+}
+
+// ComputeFrontmatterPreviewDigest computes fm-preview-digest (FR-052) as
+// SHA-256 over fm's document_metadata fields: title, page count, page
+// dimensions and language, each length-prefixed so no two distinct field
+// combinations ever collide onto the same preimage.
+//
+// FR-052 asks for a digest over "the complete set of inputs [the preview]
+// was rendered from" — which, in full, includes page-1 content, fonts and
+// resources living in the ledger past the 262,144-octet bounded prefix.
+// Per plan.md's disclosed threat-model gap ("Bounded-prefix preview
+// authentication gap", Section 6/9), those out-of-window inputs are not
+// computable from the bounded prefix at all: only the document_metadata
+// fields above are both in-window and named there as the genuinely
+// checkable subset. This function computes exactly that in-window
+// subset's digest and no more; it does not claim to authenticate the
+// preview raster's fidelity to actual page-1 content, only to detect
+// drift in the four in-window fields it covers.
+func ComputeFrontmatterPreviewDigest(fm *Frontmatter) pdlfmt.Digest256 {
+	var buf []byte
+	buf = pdlfmt.AppendVarint(buf, uint64(len(fm.Title)))
+	buf = append(buf, fm.Title...)
+	buf = pdlfmt.AppendVarint(buf, uint64(fm.PageCount))
+	buf = pdlfmt.AppendVarint(buf, uint64(fm.PageWidth))
+	buf = pdlfmt.AppendVarint(buf, uint64(fm.PageHeight))
+	buf = pdlfmt.AppendVarint(buf, uint64(len(fm.Language)))
+	buf = append(buf, fm.Language...)
+	return pdlfmt.Digest256(sha256.Sum256(buf))
 }
