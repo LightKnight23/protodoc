@@ -112,7 +112,7 @@ func notImplemented(verb string) RunFunc {
 // redact, publish, sign and migrate".
 var verbs = []Verb{
 	{Name: "validate", Usage: "protodoc validate <file>", Run: notImplemented("validate")},
-	{Name: "inspect", Usage: "protodoc inspect <file>", Run: notImplemented("inspect")},
+	{Name: "inspect", Usage: "protodoc inspect <file>", Run: runInspect},
 	{Name: "extract", Usage: "protodoc extract <file> [--to <path>] [--locators]", Run: notImplemented("extract")},
 	{Name: "verify", Usage: "protodoc verify <file> [--signature <id>] [--offline]", Run: notImplemented("verify")},
 	{Name: "diff", Usage: "protodoc diff <fileA> <fileB> [--format=json|text]", Run: notImplemented("diff")},
