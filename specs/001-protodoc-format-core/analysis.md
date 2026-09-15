@@ -1,6 +1,6 @@
 # Protodoc: Cross-Artifact Analysis
 
-Status: DRAFT — awaiting approval by Eyvar | Spec ID: 001-protodoc-format-core | Phase: 5 (analyze) | Date: 2026-09-14
+Status: APPROVED — Eyvar, 2026-09-15 | Spec ID: 001-protodoc-format-core | Phase: 5 (analyze) | Date: 2026-09-14
 
 ---
 
