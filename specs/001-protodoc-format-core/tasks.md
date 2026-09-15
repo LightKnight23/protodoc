@@ -12,7 +12,7 @@ Per AD-002 (accepted deviation, `clarify.md`), all 197 requirements carry unifor
 |---|---|---|---|
 | M01 | Core Encoding & Fixed Prefix | None | Header/CommitRing/Frontmatter/SegmentTable structs round-trip byte-exact with PD-RING-001 tie-break and bounds-safe arithmetic passing at-limit/over-limit fixtures. |
 | M02 | Ledger & Placement | M01 | A K-octet edit commits within the NFR-008 write-cost and FR-057 index-delta budgets, and a no-op open/save round-trips octet-identical per NFR-003. |
-| M03 | Extensibility Envelope | M01, M02 | An envelope with each of the 3 dispositions round-trips, a missing-disposition envelope is rejected naming the token, and a fallback-reference cycle vector is rejected. |
+| M03 | Extensibility Envelope | M01, M02, M07 | An envelope with each of the 3 dispositions round-trips, a missing-disposition envelope is rejected naming the token, and a fallback-reference cycle vector is rejected. |
 | M04 | Identity & Anchor | M01, M02 | Run split/merge/move/reorder preserve run_id under fuzzing, no identifier is ever reissued, and orphan-carriage retains author/quoted-text/neighbours through the append-only ledger. |
 | M05 | Extraction | M01, M02, M04 | A 1 GiB/10,000-page document extracts streaming, abandonable, zero-trust-material within the NFR-012/013/014 octets-read/time/memory budgets, under 1000 lines per TR-011. |
 | M06 | Signature Primitive (EdDSA-Protodoc-1) | M01 | Signing one state twice with one key yields identical octets, and every allowlisted parameter set passes its vector suite while off-allowlist parameters are rejected. |
@@ -650,7 +650,7 @@ Every non-core construct funnels through EXT_ENVELOPE, so forward-compat and uni
 
 **T-0051** Frontmatter.fm-retired-tokens field (tag=10)
 
-> Implement Frontmatter field tag=10 per container.abnf S4: plain-seq-of(ext-token), <=16384 octets total, the set of tokens this document has permanently retired. Enforce the size cap at decode time (structural reject, not truncation) and reject any entry whose owner-id partition (T-300) is not the 0xFFFFFFFF tombstone namespace.
+> Implement Frontmatter field tag=10 per container.abnf S4: plain-seq-of(ext-token), <=16384 octets total, the set of tokens this document has permanently retired. Enforce the size cap at decode time (structural reject, not truncation) and reject any entry whose owner-id partition (T-0050) is not the 0xFFFFFFFF tombstone namespace.
 
 - **Implements:** CON-020
 - **Depends on:** T-0050
@@ -660,7 +660,7 @@ Every non-core construct funnels through EXT_ENVELOPE, so forward-compat and uni
 
 **T-0052** ExtensionEnvelope record struct and PDL-TLV codec
 
-> Implement the ext-envelope record shape from document.abnf S6: ext-discriminant (0x06), ext-tok, ext-payload-length, ext-payload-ref, ext-payload-digest, ext-disposition, ext-fallback-ref, ext-position-key. Legal in CONTENT and RESOURCE segments. Requires M02's unit-id/segment addressing (place()) to already exist for ext-payload-ref to resolve. This task covers only the 7-field record's own encode/decode round-trip, not the semantic checks on disposition/fallback (T-304..T-307) or the digest verification (T-303).
+> Implement the ext-envelope record shape from document.abnf S6: ext-discriminant (0x06), ext-tok, ext-payload-length, ext-payload-ref, ext-payload-digest, ext-disposition, ext-fallback-ref, ext-position-key. Legal in CONTENT and RESOURCE segments. Requires M02's unit-id/segment addressing (place()) to already exist for ext-payload-ref to resolve. This task covers only the 7-field record's own encode/decode round-trip, not the semantic checks on disposition/fallback (T-0054..T-0057) or the digest verification (T-0053).
 
 - **Implements:** FR-012
 - **Depends on:** T-0050
@@ -690,7 +690,7 @@ Every non-core construct funnels through EXT_ENVELOPE, so forward-compat and uni
 
 **T-0055** PD-EXT-002: ext-fallback-ref mandatory-when-{ignore,degrade}
 
-> Implement validator rule PD-EXT-002: ext-fallback-ref MUST be non-zero16 when ext-disposition is ignore or degrade; a zero16 fallback under either of those two dispositions is rejected. This is the 'declared fallback exists' half of FR-015; reachability (the other half) is T-306.
+> Implement validator rule PD-EXT-002: ext-fallback-ref MUST be non-zero16 when ext-disposition is ignore or degrade; a zero16 fallback under either of those two dispositions is rejected. This is the 'declared fallback exists' half of FR-015; reachability (the other half) is T-0056.
 
 - **Implements:** FR-015
 - **Depends on:** T-0054
@@ -730,7 +730,7 @@ Every non-core construct funnels through EXT_ENVELOPE, so forward-compat and uni
 
 **T-0059** Reader disposition-enforcement policy (ignore/degrade/refuse runtime behaviour)
 
-> An unimplemented construct or capability applies its declared disposition exactly, never silent omission or heuristic approximation. Implement the three runtime behaviours in the reader-facing decode path: ignore = skip the construct's presentation contribution while still emitting it as opaque data for extraction/preservation; degrade = substitute the audited fallback (T-306) in its place; refuse = decline to render/extract past that point, naming the token, per the disposition's own semantics -- this is a distinct runtime-behaviour concern from the disposition value's own decode (T-304).
+> An unimplemented construct or capability applies its declared disposition exactly, never silent omission or heuristic approximation. Implement the three runtime behaviours in the reader-facing decode path: ignore = skip the construct's presentation contribution while still emitting it as opaque data for extraction/preservation; degrade = substitute the audited fallback (T-0056) in its place; refuse = decline to render/extract past that point, naming the token, per the disposition's own semantics -- this is a distinct runtime-behaviour concern from the disposition value's own decode (T-0054).
 
 - **Implements:** FR-107
 - **Depends on:** T-0054, T-0055
@@ -740,7 +740,7 @@ Every non-core construct funnels through EXT_ENVELOPE, so forward-compat and uni
 
 **T-0060** Writer-side retirement enforcement: a retired token is never reissued
 
-> Beyond storing fm-retired-tokens (T-301), the writer must refuse to mint a fresh registered- or owner-scoped-tier ext-tok whose owner-id+owner-local-seq pair already appears in the document's (or, for registered tier, the registry's) retired set. This closes the end-to-end 'never reissued' guarantee CP-011 non-negotiable #5 requires, mirroring the discipline already used for run_id/unit_id retirement.
+> Beyond storing fm-retired-tokens (T-0051), the writer must refuse to mint a fresh registered- or owner-scoped-tier ext-tok whose owner-id+owner-local-seq pair already appears in the document's (or, for registered tier, the registry's) retired set. This closes the end-to-end 'never reissued' guarantee CP-011 non-negotiable #5 requires, mirroring the discipline already used for run_id/unit_id retirement.
 
 - **Implements:** CON-020
 - **Depends on:** T-0050, T-0051
@@ -800,7 +800,7 @@ Every non-core construct funnels through EXT_ENVELOPE, so forward-compat and uni
 
 **T-0066** Continuous fuzzing harness for ExtensionEnvelope decode (CP-012)
 
-> EXT_ENVELOPE decodes untrusted bytes (arbitrary ext-tok, malformed ext-payload-length, disposition out-of-range, garbage fallback-ref) and per CP-012 must be wired into the continuous fuzzing harness as part of its own exit criteria. Seed corpus from T-312/T-313/T-315's conformance fixtures; the fuzzer must never find a panic, unbounded allocation, or a decode that silently accepts an out-of-range disposition.
+> EXT_ENVELOPE decodes untrusted bytes (arbitrary ext-tok, malformed ext-payload-length, disposition out-of-range, garbage fallback-ref) and per CP-012 must be wired into the continuous fuzzing harness as part of its own exit criteria. Seed corpus from T-0062/T-0063/T-0065's conformance fixtures; the fuzzer must never find a panic, unbounded allocation, or a decode that silently accepts an out-of-range disposition.
 
 - **Implements:** FR-107, FR-014
 - **Depends on:** T-0052, T-0053, T-0054
@@ -989,7 +989,7 @@ NFC-scoped text and CSPRNG-minted run/unit identity are the addressing scheme ev
 
 **T-0082** Implement PD-LANG-001 validator rule: reject unresolvable language tag
 
-> Closes the gap the inventory flags as PARTIAL: spec's PD-LANG-001 rule ('reject if unresolvable') exists as a field per T-415 but was never wired into a validation check. Adds the actual validator rule and its entry in the generated rule registry (contracts/README.md S7) so it participates in the NFR-029 coverage check.
+> Closes the gap the inventory flags as PARTIAL: spec's PD-LANG-001 rule ('reject if unresolvable') exists as a field per T-0081 but was never wired into a validation check. Adds the actual validator rule and its entry in the generated rule registry (contracts/README.md S7) so it participates in the NFR-029 coverage check.
 
 - **Implements:** FR-031
 - **Depends on:** T-0081
@@ -999,7 +999,7 @@ NFC-scoped text and CSPRNG-minted run/unit identity are the addressing scheme ev
 
 **T-0083** A-FIELD-ROLE audit: assert no persisted counted position exists in content package
 
-> Per plan.md Section 10 item 2, base_ordinal and run_id must pass the A-FIELD-ROLE audit distinguishing IDENTITY-COMPONENT fields from positional arithmetic. This task builds the checked audit (not just the field's own arithmetic from T-402) as a standing test/lint rule the rest of the content model is built against.
+> Per plan.md Section 10 item 2, base_ordinal and run_id must pass the A-FIELD-ROLE audit distinguishing IDENTITY-COMPONENT fields from positional arithmetic. This task builds the checked audit (not just the field's own arithmetic from T-0068) as a standing test/lint rule the rest of the content model is built against.
 
 - **Implements:** CON-001
 - **Depends on:** T-0068
@@ -1273,7 +1273,7 @@ The 7-step wrapper is vector-tested in isolation because every Signature, Covera
 
 **T-0106** Steps 3-4: canonical-encoding and small-order check for R
 
-> Implement checkR(R [32]byte) error mirroring T-604's canonical-magnitude and small-order checks, applied to the R half of sig-value.
+> Implement checkR(R [32]byte) error mirroring T-0105's canonical-magnitude and small-order checks, applied to the R half of sig-value.
 
 - **Implements:** CON-015
 - **Depends on:** T-0104
@@ -1293,7 +1293,7 @@ The 7-step wrapper is vector-tested in isolation because every Signature, Covera
 
 **T-0108** Verify() 7-step orchestration with short-circuit and stdlib delegation
 
-> Compose Steps 1-5 (T-604/605/606) in order; on the first failure return false immediately without calling stdlib. On all 5 passing, delegate Step 6/7 entirely to unmodified stdlib crypto/ed25519.Verify(A, msg, R\|\|S) and return its boolean result verbatim. Step 6's challenge computation is never independently recomputed outside that call, per integrity.abnf S6's exposition note.
+> Compose Steps 1-5 (T-0105/605/606) in order; on the first failure return false immediately without calling stdlib. On all 5 passing, delegate Step 6/7 entirely to unmodified stdlib crypto/ed25519.Verify(A, msg, R\|\|S) and return its boolean result verbatim. Step 6's challenge computation is never independently recomputed outside that call, per integrity.abnf S6's exposition note.
 
 - **Implements:** CON-015
 - **Depends on:** T-0103, T-0105, T-0106, T-0107
@@ -1313,7 +1313,7 @@ The 7-step wrapper is vector-tested in isolation because every Signature, Covera
 
 **T-0110** Sign-twice determinism vector suite
 
-> Sign a fixed set of representative messages (0-octet, 1-octet, 4096-octet) twice each with the same key and assert the raw 64-octet sig-value output is byte-identical both times, then confirm both outputs verify true via T-607's Verify(). This is the literal NFR-006 acceptance test.
+> Sign a fixed set of representative messages (0-octet, 1-octet, 4096-octet) twice each with the same key and assert the raw 64-octet sig-value output is byte-identical both times, then confirm both outputs verify true via T-0108's Verify(). This is the literal NFR-006 acceptance test.
 
 - **Implements:** NFR-006
 - **Depends on:** T-0103, T-0108
@@ -1430,7 +1430,7 @@ The generated ceiling table and the validation pipeline's error-precedence/cycle
 
 **T-0119** Extension-envelope fallback-reference cycle vector
 
-> Author the conformance vector for an extension-envelope fallback-reference (ext-fallback-ref) forming a cycle — one of FR-109's 5 edge kinds — per plan.md Section 10 first-class task (g), which explicitly requires this NOT be folded into general conformance work. Note: a possibly-overlapping fixture is referenced elsewhere under raw id T-314 in another milestone's inventory; this task is kept as specified pending phase-5 analyze reconciliation (see milestone notes) rather than unilaterally merged or dropped.
+> Author the conformance vector for an extension-envelope fallback-reference (ext-fallback-ref) forming a cycle — one of FR-109's 5 edge kinds — per plan.md Section 10 first-class task (g), which explicitly requires this NOT be folded into general conformance work. Note: a possibly-overlapping fixture is referenced elsewhere under raw id T-0064 in another milestone's inventory; this task is kept as specified pending phase-5 analyze reconciliation (see milestone notes) rather than unilaterally merged or dropped.
 
 - **Implements:** FR-109
 - **Depends on:** T-0118
@@ -1576,7 +1576,7 @@ structure_digest and state identity both derive from T_C_root, so the digest tre
 
 **T-0129** ABSENT_CHILD_DIGEST constant and T_S/T_C domain-tag registry
 
-> Checked-in Go constants for ABSENT_CHILD_DIGEST = SHA-256(0x00) and the domain-tag registry values used by the two trees: 0x01 (T_S internal), 0x02 (T_C leaf-redactable), 0x07 (T_C leaf-nonredactable), 0x08 (T_C internal) per contracts/README.md S3.2's consolidated registry and integrity.abnf S2. A single shared table prevents two implementations from disagreeing on which byte prefixes a real digest can never start with (required so ABSENT_CHILD_DIGEST can never collide with a genuine node/leaf digest, per S2.3's own claim). This is pure constant/utility code with no tree-shape logic yet -- feeds T-801 and T-803..T-807.
+> Checked-in Go constants for ABSENT_CHILD_DIGEST = SHA-256(0x00) and the domain-tag registry values used by the two trees: 0x01 (T_S internal), 0x02 (T_C leaf-redactable), 0x07 (T_C leaf-nonredactable), 0x08 (T_C internal) per contracts/README.md S3.2's consolidated registry and integrity.abnf S2. A single shared table prevents two implementations from disagreeing on which byte prefixes a real digest can never start with (required so ABSENT_CHILD_DIGEST can never collide with a genuine node/leaf digest, per S2.3's own claim). This is pure constant/utility code with no tree-shape logic yet -- feeds T-0130 and T-0132..T-0136.
 
 - **Implements:** FR-003, TR-009
 - **Depends on:** None
@@ -1586,7 +1586,7 @@ structure_digest and state identity both derive from T_C_root, so the digest tre
 
 **T-0130** T_S tree: leaf and internal node encoding, arity-16/depth-4 builder
 
-> Implement t-s-leaf (= the SegmentTableSlot.slot-digest for the segment at that storage-order position, no domain tag of its own) and t-s-internal (0x01 \|\| 16 child digest256, ALWAYS a full 513-octet preimage regardless of how many children are real) per integrity.abnf S2.1. Build the fixed arity-16, depth-4 tree (16^4 = 65536 leaf capacity) over a live []SegmentTableSlot from M01's container package, filling any tree position with no corresponding slot with ABSENT_CHILD_DIGEST from T-800, at every level, not only the root.
+> Implement t-s-leaf (= the SegmentTableSlot.slot-digest for the segment at that storage-order position, no domain tag of its own) and t-s-internal (0x01 \|\| 16 child digest256, ALWAYS a full 513-octet preimage regardless of how many children are real) per integrity.abnf S2.1. Build the fixed arity-16, depth-4 tree (16^4 = 65536 leaf capacity) over a live []SegmentTableSlot from M01's container package, filling any tree position with no corresponding slot with ABSENT_CHILD_DIGEST from T-0129, at every level, not only the root.
 
 - **Implements:** TR-009
 - **Depends on:** T-0129
@@ -1596,7 +1596,7 @@ structure_digest and state identity both derive from T_C_root, so the digest tre
 
 **T-0131** T_S_root end-to-end computation with never-trust-stored recomputation rule
 
-> Wire T-801's builder into a single TSRoot(slots []SegmentTableSlot) [32]byte entry point that always recomputes from the SegmentTable's current live octets. Per data-model.md 2.11 note 2 and integrity.abnf S2.1, T_S's root is NEVER read from CommitRingRecord.ledger_root as authoritative -- ledger_root is only compared against a freshly recomputed value, and divergence is a distinct verdict, never silently accepted.
+> Wire T-0130's builder into a single TSRoot(slots []SegmentTableSlot) [32]byte entry point that always recomputes from the SegmentTable's current live octets. Per data-model.md 2.11 note 2 and integrity.abnf S2.1, T_S's root is NEVER read from CommitRingRecord.ledger_root as authoritative -- ledger_root is only compared against a freshly recomputed value, and divergence is a distinct verdict, never silently accepted.
 
 - **Implements:** TR-009
 - **Depends on:** T-0130
@@ -1616,7 +1616,7 @@ structure_digest and state identity both derive from T_C_root, so the digest tre
 
 **T-0133** T_C leaf-nonredactable node encoding (domain tag 0x07)
 
-> Implement t-c-leaf-nonredactable = 0x07 \|\| tc-canon per integrity.abnf S2.2, for content-model records not designated redactable at signing time. Same tc-canon exact-frame-bytes rule as T-803, without a salt.
+> Implement t-c-leaf-nonredactable = 0x07 \|\| tc-canon per integrity.abnf S2.2, for content-model records not designated redactable at signing time. Same tc-canon exact-frame-bytes rule as T-0132, without a salt.
 
 - **Implements:** FR-003
 - **Depends on:** T-0129
@@ -1626,7 +1626,7 @@ structure_digest and state identity both derive from T_C_root, so the digest tre
 
 **T-0134** T_C subtree traversal order (interim ascending unit-id byte-lexicographic rule)
 
-> Implement the subtree ordinal assignment that T-806/T-807 traverse in: ascending unsigned byte-lexicographic order of each content-model record's own unit-id (document.abnf S0), per integrity.abnf S2.2.1's INTERIM RULE. This is a FLAGGED, self-disclosed gap in the frozen contracts: the interim rule is deterministic and satisfies the negative constraint (never storage ordinal, never a digest) but explicitly does NOT satisfy the aspirational 'reflects the document's logical/reading-order structure' requirement -- a CSPRNG-derived unit-id order carries no relationship to reading order. Do not silently 'fix' this by inventing a reading-order traversal; implement exactly the interim rule as written and carry the same code-comment flag forward, since a future ROOT_SEQUENCE-based redefinition (integrity.abnf S2.2.1's own recommendation) is additive future work, not this task's scope.
+> Implement the subtree ordinal assignment that T-0135/T-0136 traverse in: ascending unsigned byte-lexicographic order of each content-model record's own unit-id (document.abnf S0), per integrity.abnf S2.2.1's INTERIM RULE. This is a FLAGGED, self-disclosed gap in the frozen contracts: the interim rule is deterministic and satisfies the negative constraint (never storage ordinal, never a digest) but explicitly does NOT satisfy the aspirational 'reflects the document's logical/reading-order structure' requirement -- a CSPRNG-derived unit-id order carries no relationship to reading order. Do not silently 'fix' this by inventing a reading-order traversal; implement exactly the interim rule as written and carry the same code-comment flag forward, since a future ROOT_SEQUENCE-based redefinition (integrity.abnf S2.2.1's own recommendation) is additive future work, not this task's scope.
 
 - **Implements:** FR-003
 - **Depends on:** None
@@ -1636,7 +1636,7 @@ structure_digest and state identity both derive from T_C_root, so the digest tre
 
 **T-0135** T_C internal node encoding, arity-16/depth<=5 builder
 
-> Implement t-c-internal = 0x08 \|\| 16 child digest256 (always a full 513-octet preimage) and assemble the complete T_C tree (arity 16, depth <= 5) from T-805's subtree ordinal order and T-803/T-804's leaf digests, filling any position with no corresponding subtree with ABSENT_CHILD_DIGEST at every level per integrity.abnf S2.2/data-model.md 2.10 note 1.
+> Implement t-c-internal = 0x08 \|\| 16 child digest256 (always a full 513-octet preimage) and assemble the complete T_C tree (arity 16, depth <= 5) from T-0134's subtree ordinal order and T-0132/T-0133's leaf digests, filling any position with no corresponding subtree with ABSENT_CHILD_DIGEST at every level per integrity.abnf S2.2/data-model.md 2.10 note 1.
 
 - **Implements:** FR-003
 - **Depends on:** T-0129, T-0132, T-0133, T-0134
@@ -1646,7 +1646,7 @@ structure_digest and state identity both derive from T_C_root, so the digest tre
 
 **T-0136** T_C_root end-to-end computation (state identity)
 
-> Wire T-806's builder into a single TCRoot(records []ContentRecord) [32]byte entry point defining state identity per DP-006/FR-003: 'every state gets an identifier differing whenever any value of that state differs.' Per data-model.md 2.10 note 3/5, T_C_root is the node at subtree ordinal 0 in the traversal order (T-805) and is signed directly inside signed_object, never routed through T_S. This is also the concrete realization of FR-001's abstract 'document state = complete value set' definition: TCRoot's input set IS the value set that determines extraction/render/verdict/metadata (excluding ATTEST-typed segments, enforced by T-809).
+> Wire T-0135's builder into a single TCRoot(records []ContentRecord) [32]byte entry point defining state identity per DP-006/FR-003: 'every state gets an identifier differing whenever any value of that state differs.' Per data-model.md 2.10 note 3/5, T_C_root is the node at subtree ordinal 0 in the traversal order (T-0134) and is signed directly inside signed_object, never routed through T_S. This is also the concrete realization of FR-001's abstract 'document state = complete value set' definition: TCRoot's input set IS the value set that determines extraction/render/verdict/metadata (excluding ATTEST-typed segments, enforced by T-0138).
 
 - **Implements:** FR-001, FR-003
 - **Depends on:** T-0135
@@ -1656,7 +1656,7 @@ structure_digest and state identity both derive from T_C_root, so the digest tre
 
 **T-0137** Wire CommitRingRecord.state-id-field = T_C_root at commit time
 
-> Close the loop from the tree computation (T-807) to the persisted, addressable state identity: at every commit, M01's CommitRingRecord.state-id-field (container.abnf S3) must be set to the freshly computed T_C_root of the state being committed, never a stale or separately-derived value. This is the concrete mechanism cited by plan.md for both FR-001 and FR-003. Added dependency on structure_digest (T-811 / T-0140): the commit-time wiring must use the same freshly-recomputed T_C_root and structure_digest values that feed the signed_object preimage, never a value cached from an earlier stage.
+> Close the loop from the tree computation (T-0136) to the persisted, addressable state identity: at every commit, M01's CommitRingRecord.state-id-field (container.abnf S3) must be set to the freshly computed T_C_root of the state being committed, never a stale or separately-derived value. This is the concrete mechanism cited by plan.md for both FR-001 and FR-003. Added dependency on structure_digest (T-0140 / T-0140): the commit-time wiring must use the same freshly-recomputed T_C_root and structure_digest values that feed the signed_object preimage, never a value cached from an earlier stage.
 
 - **Implements:** FR-001, FR-003
 - **Depends on:** T-0136, T-0140
@@ -1666,7 +1666,7 @@ structure_digest and state identity both derive from T_C_root, so the digest tre
 
 **T-0138** ATTEST-segment exclusion predicate (shared by T_C, CoverageDescriptor, and no-op-save comparison)
 
-> Implement one shared predicate IsAttestTyped(slot SegmentTableSlot) bool (true iff slot-segment-type = ATTEST/4) and use it to exclude every ATTEST-typed segment (SIGNATURE, RESCIND_RESIGN, ATTESTATION_EVIDENCE frames) from three call sites: (1) T_C's subtree set (T-806/T-807 never traverse into ATTEST-segment content), (2) the no-op-save octet-identity comparator (NFR-003/NFR-007: signature/time-attestation/revocation octets never participate in 'did anything change'), and (3) CoverageDescriptor construction (T-810). A single predicate, not three separately-maintained checks, is required so the three guarantees cannot silently drift apart.
+> Implement one shared predicate IsAttestTyped(slot SegmentTableSlot) bool (true iff slot-segment-type = ATTEST/4) and use it to exclude every ATTEST-typed segment (SIGNATURE, RESCIND_RESIGN, ATTESTATION_EVIDENCE frames) from three call sites: (1) T_C's subtree set (T-0135/T-0136 never traverse into ATTEST-segment content), (2) the no-op-save octet-identity comparator (NFR-003/NFR-007: signature/time-attestation/revocation octets never participate in 'did anything change'), and (3) CoverageDescriptor construction (T-0139). A single predicate, not three separately-maintained checks, is required so the three guarantees cannot silently drift apart.
 
 - **Implements:** NFR-007, FR-002
 - **Depends on:** T-0129
@@ -1676,7 +1676,7 @@ structure_digest and state identity both derive from T_C_root, so the digest tre
 
 **T-0139** CoverageDescriptor wire encode/decode and PD-COVER-001..004 structural validity (canonical shared implementation)
 
-> Implement coverage-descriptor = cd-mode cd-covered-ranges cd-uncovered-ranges cd-bitmask encode/decode (integrity.abnf S4) and its four structural validity rules: PD-COVER-001 (sr-end > sr-start, reject zero-length ranges), PD-COVER-002 (mandatory merge-adjacent canonicalisation -- exactly one valid encoding per coverage set), PD-COVER-003 (every ordinal in [0, segment_count) covered by exactly one of the two lists, no gap, no overlap), PD-COVER-004 (no ATTEST-typed ordinal nameable in either list, using T-809's predicate -- this is FR-002's self-coverage circularity closure). Scope is structural encode/decode/validate only; signature binding and the range-list property-based fuzzer at the MAX_SEGMENTS boundary are M09's first-class task, not this one. This package is the SINGLE canonical CoverageDescriptor wire implementation for the whole codebase: FR-063 (M09 signature/coverage call sites) names the identical wire mechanism and MUST import and reuse this package rather than re-implementing coverage-descriptor encode/decode/validate; a second independent implementation of this ABNF production is a defect, not an acceptable split.
+> Implement coverage-descriptor = cd-mode cd-covered-ranges cd-uncovered-ranges cd-bitmask encode/decode (integrity.abnf S4) and its four structural validity rules: PD-COVER-001 (sr-end > sr-start, reject zero-length ranges), PD-COVER-002 (mandatory merge-adjacent canonicalisation -- exactly one valid encoding per coverage set), PD-COVER-003 (every ordinal in [0, segment_count) covered by exactly one of the two lists, no gap, no overlap), PD-COVER-004 (no ATTEST-typed ordinal nameable in either list, using T-0138's predicate -- this is FR-002's self-coverage circularity closure). Scope is structural encode/decode/validate only; signature binding and the range-list property-based fuzzer at the MAX_SEGMENTS boundary are M09's first-class task, not this one. This package is the SINGLE canonical CoverageDescriptor wire implementation for the whole codebase: FR-063 (M09 signature/coverage call sites) names the identical wire mechanism and MUST import and reuse this package rather than re-implementing coverage-descriptor encode/decode/validate; a second independent implementation of this ABNF production is a defect, not an acceptable split.
 
 - **Implements:** FR-002
 - **Depends on:** T-0138
@@ -1686,7 +1686,7 @@ structure_digest and state identity both derive from T_C_root, so the digest tre
 
 **T-0140** structure_digest fresh-recomputation algorithm (8-item conditional preimage)
 
-> Implement the exact fixed-order preimage assembly of integrity.abnf S3.1: (1) domain tag 0x0A always; (2) header_bytes[0,480) iff bit HEADER; (3) winning CommitRingRecord's own octets[0,480) iff bit RING_WINNER; (4) ledger-length always, unconditionally; (5) frontmatter document_metadata field bytes in fixed tag order iff bit FRONTMATTER (fm-preview-raster/fm-preview-digest/fm-source-snapshot NEVER participate regardless of bit); (6) covered_prefix_regions_bitmask itself, always; (7) sorted covered-segment-summary vec (ordinal, type, length, digest -- digest RECOMPUTED FRESH per segment, never read from stored slot-digest or trailing self-digest) iff bit SEGMENT_TABLE; (8) T_S root (T-802) RECOMPUTED FRESH iff bit INTEGRITY_BLOCK. Hash the assembled buffer once with SHA-256. This is the concrete mechanism FR-002 and TR-009 both cite: the acted-upon set is exactly this preimage's covered items, and every value in it is freshly recomputed, never trusted from storage.
+> Implement the exact fixed-order preimage assembly of integrity.abnf S3.1: (1) domain tag 0x0A always; (2) header_bytes[0,480) iff bit HEADER; (3) winning CommitRingRecord's own octets[0,480) iff bit RING_WINNER; (4) ledger-length always, unconditionally; (5) frontmatter document_metadata field bytes in fixed tag order iff bit FRONTMATTER (fm-preview-raster/fm-preview-digest/fm-source-snapshot NEVER participate regardless of bit); (6) covered_prefix_regions_bitmask itself, always; (7) sorted covered-segment-summary vec (ordinal, type, length, digest -- digest RECOMPUTED FRESH per segment, never read from stored slot-digest or trailing self-digest) iff bit SEGMENT_TABLE; (8) T_S root (T-0131) RECOMPUTED FRESH iff bit INTEGRITY_BLOCK. Hash the assembled buffer once with SHA-256. This is the concrete mechanism FR-002 and TR-009 both cite: the acted-upon set is exactly this preimage's covered items, and every value in it is freshly recomputed, never trusted from storage.
 
 - **Implements:** FR-002, TR-009
 - **Depends on:** T-0131, T-0139
@@ -1696,7 +1696,7 @@ structure_digest and state identity both derive from T_C_root, so the digest tre
 
 **T-0141** Conformance test: altered stored inventory detected before being relied upon
 
-> Dedicated conformance test for TR-009's literal guarantee: 'bind the prefix inventory to integrity protection so an altered inventory is detected before any listed value is relied upon.' Construct a document state, compute structure_digest and record it as the trusted baseline, then tamper with one stored SegmentTableSlot field (length or type) without updating any digest, and assert that recomputing structure_digest (via T-811, which recomputes T_S fresh via T-802 and segment digests fresh) produces a different value than the trusted baseline -- i.e. the tamper is caught by comparison, never by trusting the tampered slot's own claimed digest.
+> Dedicated conformance test for TR-009's literal guarantee: 'bind the prefix inventory to integrity protection so an altered inventory is detected before any listed value is relied upon.' Construct a document state, compute structure_digest and record it as the trusted baseline, then tamper with one stored SegmentTableSlot field (length or type) without updating any digest, and assert that recomputing structure_digest (via T-0140, which recomputes T_S fresh via T-0131 and segment digests fresh) produces a different value than the trusted baseline -- i.e. the tamper is caught by comparison, never by trusting the tampered slot's own claimed digest.
 
 - **Implements:** TR-009
 - **Depends on:** T-0131, T-0140
@@ -1716,7 +1716,7 @@ structure_digest and state identity both derive from T_C_root, so the digest tre
 
 **T-0143** Conformance test: root changes whenever any covered value changes
 
-> Exit-criteria-mandated sensitivity check, complementing T-813's determinism check. For a base fixture, generate one mutated variant per leaf/domain-tag kind covered by the two trees (T_S leaf digest, T_C redactable leaf frame byte, T_C redactable leaf salt, T_C nonredactable leaf frame byte, one internal-node position becoming ABSENT_CHILD_DIGEST) and assert the corresponding root changes for every variant -- a single unmutated control case must NOT change, ruling out a test that trivially always reports 'changed.' Added dependency on structure_digest (T-811 / T-0140): the sensitivity check verifies the same fresh T_C_root/structure_digest values Verify() recomputes, not a cached copy.
+> Exit-criteria-mandated sensitivity check, complementing T-0142's determinism check. For a base fixture, generate one mutated variant per leaf/domain-tag kind covered by the two trees (T_S leaf digest, T_C redactable leaf frame byte, T_C redactable leaf salt, T_C nonredactable leaf frame byte, one internal-node position becoming ABSENT_CHILD_DIGEST) and assert the corresponding root changes for every variant -- a single unmutated control case must NOT change, ruling out a test that trivially always reports 'changed.' Added dependency on structure_digest (T-0140 / T-0140): the sensitivity check verifies the same fresh T_C_root/structure_digest values Verify() recomputes, not a cached copy.
 
 - **Implements:** FR-003
 - **Depends on:** T-0131, T-0136, T-0140
