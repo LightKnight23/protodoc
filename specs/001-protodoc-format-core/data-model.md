@@ -485,6 +485,12 @@ Limits: appears as an element of `PresentationArtefact.font_identity`, itself bo
 
 Purpose: fast page-break lookup, rank-augmented over content identity, never absolute page ordinal.
 
+Confirmed by ruling (CQ-016, clarify.md, 2026-09-15): PageDirectory intentionally has no container.abnf wire
+discriminant, unlike its sibling UnitIndex/UnitIndexLeaf (`0x0A`). It is genuinely lazy-rebuilt on first
+page-oriented access and bounded by `MAX_PAGES`, and plays no role in NFR-012's extraction-budget obligation
+the way UnitIndex does — it does not need a persisted, randomly-addressable wire structure. This is not an
+oversight; do not assign it a discriminant.
+
 Invariants:
 1. Digest-bound to its inputs; refused when stale.
 2. Insertion writes only the touched path.

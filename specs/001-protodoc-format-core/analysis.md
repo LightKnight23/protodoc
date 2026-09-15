@@ -357,4 +357,16 @@ Applied directly to `data-model.md` and `tasks.md` after this analysis ran, with
 - CON-018 trial-coverage question (whether the combined NFR-026 extracting-and-validating trial satisfies both of CON-018's named roles' "own trial" obligation): still open, needs Eyvar/themis confirmation, recorded in `tasks.md` section 5.
 - The gap-a-verification finding required no action (it confirmed GAP A's fix was sound).
 
-**Remaining before this gate fully passes:** CP-009 (blocker), the `PD-NORM-001`/`PD-NFC-001` naming conflict, FR-061's own text-vs-provisional-form approval, PageDirectory's discriminant question, and CON-018's trial-coverage confirmation — five items, all requiring Eyvar's explicit ruling rather than further mechanical work.
+**Remaining before this gate fully passes (as originally listed):** CP-009 (blocker), the `PD-NORM-001`/`PD-NFC-001` naming conflict, FR-061's own text-vs-provisional-form approval, PageDirectory's discriminant question, and CON-018's trial-coverage confirmation — five items, all requiring Eyvar's explicit ruling rather than further mechanical work.
+
+## 10. Rulings applied (2026-09-15)
+
+Eyvar ruled on all five remaining items 2026-09-15, adopting the recommended option in every case. Full record in `clarify.md` CQ-013..CQ-017.
+
+- **CQ-013 (CP-009 blocker):** amended CP-009 (`.specify/memory/constitution.md` v0.2.0) with a narrow standing exception for a pinned, versioned external artefact cited strictly as a byte-exact determinism oracle. T-0252/T-0253/T-0266 updated; no longer blocked. CON-006 (spec.md's requirement-level mirror) read consistently with the same exception.
+- **CQ-014 (rule id conflict):** `PD-NFC-001`/`PD-NFC-002` ruled canonical. `spec.md`'s CON-002 verify clause corrected from `PD-NORM-001` to `PD-NFC-002`.
+- **CQ-015 (FR-061 vs FR-075):** FR-061's frozen text amended to require the salted-commitment digest form. No implementation changes result, since `tasks.md` was already built against this form. T-0187, T-0190, T-0217, T-0218 updated to drop "provisional"/"pending ruling" framing.
+- **CQ-016 (PageDirectory discriminant):** confirmed intentional. `data-model.md` 2.22 updated with the ruling; no discriminant assigned.
+- **CQ-017 (CON-018 trial coverage):** confirmed the combined NFR-026 extracting-and-validating trial (T-0345) satisfies CON-018's obligation for both named roles. No new trial task added.
+
+**Updated gate verdict: PASSES.** 0 orphan requirements, 0 surviving blocker findings (all 4 closed: 3 mechanically, 1 via CQ-013), 0 unresolved major findings requiring further judgment (all 7 closed: 5 mechanically, 2 via CQ-014/CQ-015), and both minor judgment items resolved (CQ-016, CQ-017). Phase 6 (implement) is unblocked.

@@ -40,7 +40,7 @@ Per AD-002 (accepted deviation, `clarify.md`), all 197 requirements carry unifor
 - **Continuous fuzzing (CP-012)** (applies to: M01, M02, M03, M07, M09, M10, M14): Any milestone with a decode path over untrusted bytes (container parse, extension envelope, validator, CoverageDescriptor, LTV evidence, PLP-1/PNG codecs) wires into the fuzzing harness as part of its own exit criteria, feeding M19's harness-maturity check.
 - **Governance/licensing (CP-014)** (applies to: M03, M19): Registry token-review turnaround (CON-021) attaches to M03's token governance; media-type registration (FR-125, folded into M01) and the licensing/steward/deprecation-window gate (CON-026) attach to M19 as final release gates, not coding blockers for any other milestone.
 - **plan.md Section 10 first-class tasks (a)-(g)** (applies to: M09, M13, M14, M11, M01, M03, M07): CoverageDescriptor range-list fuzzer to M09, exhaustive op-kind-pair test to M13, PLP-1 decode vectors authored before its decoder to M14, orphan-carriage redaction residue vector to M11, frame_count boundary vector and PD-RING-001 tie vector both to M01, extension-envelope fallback-cycle vector to M03/M07's cycle-detection work.
-- **Disclosed unresolved conflicts gating specific milestone closes** (applies to: M11, M14, M07, M19, M15): FR-061 salted-form ruling gates M11's final wire shape, EX-001 shaping-oracle exception gates only M14's shaping sub-slice, the NFR-030 memory-floor reading gates M07's close, the NFR-027 budget risk gates M14/M19 schedule sign-off, and the accessibility field gaps mean M15 cannot exit without a spec amendment — surface this to Eyvar before phase 5 analyze closes.
+- **Disclosed conflicts, now resolved by Eyvar's phase-5 rulings (2026-09-15, clarify.md CQ-013/CQ-015)** (applies to: M11, M14): FR-061's frozen text now requires the salted-commitment form M11's wire shape already built (CQ-015); CP-009's standing exception clause (v0.2.0) now permits M14's pinned shaping oracle without a one-time EX-001 exception (CQ-013). Still open, needing separate governance work, not a ruling: the NFR-030 memory-floor reading gates M07's close, the NFR-027 budget risk gates M14/M19 schedule sign-off, and the accessibility field gaps mean M15 cannot exit without a spec amendment (T-0267).
 
 ---
 
@@ -2281,7 +2281,7 @@ Salted-commitment redactable subtrees and the redact/publish residue guarantees 
 | T-0187 | Salted-commitment digest construction H(0x02\|\|salt\|\|canon(subtree)) | FR-074, FR-075 | T-0185, T-0186 | argus | `TestFR_074_SaltedCommitmentDigest` (unit) |
 | T-0188 | Conformance vectors for redactable-subtree designation and commitment round-trip | FR-074 | T-0185, T-0186, T-0187 | momus | `redact-designate-conformance-001` (conformance) |
 | T-0189 | Hiding-floor analysis: resistance to 2^80 exhaustive search over omitted content | FR-075 | T-0187 | argus | `TestFR_075_HidingBoundAgainstBruteForce` (unit) |
-| T-0190 | Track outstanding FR-061/FR-075 salted-commitment ruling before M11 close | FR-075 | T-0189 | clio | `gov-checklist-FR061-FR075-ruling-recorded` (integration) |
+| T-0190 | Record the FR-061/FR-075 salted-commitment ruling in clarify.md | FR-075 | T-0189 | clio | `gov-checklist-FR061-FR075-ruling-recorded` (integration) |
 | T-0191 | Redact operation: subtree removal replacing plaintext with commitment leaf, T_C_root-preserving | FR-076 | T-0187 | argus | `TestFR_076_RedactPreservesTCRoot` (unit) |
 | T-0192 | Verify() reports AttestedWithDeclaredOmissions enumerating every omitted unit | FR-076 | T-0191 | argus | `TestFR_076_VerifyReportsDeclaredOmissions` (integration) |
 | T-0193 | Conformance vectors for declared-omission verdict enumeration | FR-076 | T-0191, T-0192 | momus | `redact-declared-omission-conformance-001` (conformance) |
@@ -2341,21 +2341,21 @@ Salted-commitment redactable subtrees and the redact/publish residue guarantees 
 
 **T-0189** Hiding-floor analysis: resistance to 2^80 exhaustive search over omitted content
 
-> Verify the salted-commitment construction from T-1103 meets FR-075's 2^80 hiding floor: assert salt entropy (>=128 bits, CSPRNG-sourced), assert commitment digests for differing subtrees/salts carry no exploitable structural correlation, and document the post-removal search cost (2^256 per plan.md Section 5 row 28). Explicitly flag: this is the FLAGGED DEVIATION from FR-061's literal bare-unsalted-digest text (plan.md Section 9 Conflict 1, self-disclosed, unresolved) — do not silently resolve the conflict, proceed only under the provisional salted form plan.md already adopted.
+> Verify the salted-commitment construction from T-0187 meets FR-075's 2^80 hiding floor: assert salt entropy (>=128 bits, CSPRNG-sourced), assert commitment digests for differing subtrees/salts carry no exploitable structural correlation, and document the post-removal search cost (2^256 per plan.md Section 5 row 28). Corrected at phase 5 (analyze): a stale pre-renumbering id ("T-1103") in this description has been fixed to T-0187, and the salted-commitment form is FR-061's own frozen text as of the CQ-015 ruling (2026-09-15), not a flagged deviation from it.
 
 - **Implements:** FR-075
 - **Depends on:** T-0187
-- **DoD:** Test suite asserts salt entropy floor and absence of cross-subtree digest correlation across >=10,000 sampled pairs; the FR-061/FR-075 tension is recorded in the task's test file comment referencing plan.md Section 9 Conflict 1.
+- **DoD:** Test suite asserts salt entropy floor and absence of cross-subtree digest correlation across >=10,000 sampled pairs.
 - **Test:** `TestFR_075_HidingBoundAgainstBruteForce` (unit)
 - **Owner:** argus
 
-**T-0190** Track outstanding FR-061/FR-075 salted-commitment ruling before M11 close
+**T-0190** Record the FR-061/FR-075 salted-commitment ruling in clarify.md
 
-> Governance tracking task, not a code change: plan.md Section 9 Conflict 1 is unresolved — FR-061's literal text demands a bare unsalted severed-state digest, which conflicts with FR-075's 2^80 hiding floor. A salted-commitment form ships provisionally. Per the spine's disclosed-conflicts note, this gates M11's final wire-shape close. Record an explicit request for an Eyvar/themis ruling in clarify.md before phase 5 (analyze) closes; do not let this milestone's wire shape be treated as final until the ruling lands.
+> Governance tracking task, not a code change: plan.md Section 9 Conflict 1 (FR-061's literal text demanding a bare unsalted severed-state digest vs. FR-075's 2^80 hiding floor) is RESOLVED at phase 5 (analyze) — Eyvar approved amending FR-061's frozen text to require the salted-commitment digest, 2026-09-15. Record this ruling in clarify.md as the closed decision, so the M11 wire shape (already built against the salted form since the beginning) is confirmed final rather than provisional.
 
 - **Implements:** FR-075
 - **Depends on:** T-0189
-- **DoD:** clarify.md contains a dated entry naming Conflict 1 (FR-061 vs FR-075), stating the provisional salted-commitment resolution in force, and marked open pending an Eyvar/themis ruling; presence verified by a CI doc-lint check that greps clarify.md for the entry, not by a Go test, since this task changes no code.
+- **DoD:** clarify.md contains a dated entry naming Conflict 1 (FR-061 vs FR-075) as resolved 2026-09-15, citing the FR-061 spec.md amendment, and stating the salted-commitment form is final, not provisional; presence verified by a CI doc-lint check that greps clarify.md for the entry, not by a Go test, since this task changes no code.
 - **Test:** `gov-checklist-FR061-FR075-ruling-recorded` (integration)
 - **Owner:** clio
 
@@ -2537,7 +2537,7 @@ HistorySegment reconstruction and retention-point gating need run/unit identity 
 | T-0214 | Implement RETAINED_FROM_POINT-mode state reconstruction | FR-060 | T-0213, T-0209 | hephaestus | `TestFR_060_RetainedFromPointReconstructsGuaranteedRange` (integration) |
 | T-0215 | Enforce NO_HISTORY-mode current-state-only retention | CON-022 | T-0207 | hephaestus | `TestCON_022_NoHistoryModeRetainsOnlyCurrentState` (integration) |
 | T-0216 | Refuse in-place content removal on COMPLETE_HISTORY documents | CON-023 | T-0207 | hephaestus | `TestCON_023_RefusesInPlaceRemovalOnCompleteHistory` (unit) |
-| T-0217 | Implement ErasureRecord wire shape (provisional salted-commitment form) | FR-061 | T-0209, T-0187 | mnemosyne | `TestFR_061_ErasureRecordSaltedCommitmentForm` (unit) |
+| T-0217 | Implement ErasureRecord wire shape (salted-commitment form) | FR-061 | T-0209, T-0187, T-0190 | mnemosyne | `TestFR_061_ErasureRecordSaltedCommitmentForm` (unit) |
 | T-0218 | Emit ErasureRecord enumeration on lawful trim | FR-061 | T-0217, T-0213 | mnemosyne | `TestFR_061_ErasureEnumeratedOnRetentionAdvance` (integration) |
 | T-0219 | Separate materialized current-state read path from history region | NFR-033 | T-0208 | hephaestus | `TestNFR_033_OpenCostIndependentOfOpCount` (benchmark) |
 | T-0220 | Benchmark: 10x op-count difference opens within 1.5x | NFR-033 | T-0219 | prometheus | `TestNFR_033_TenXOpCountOpensWithin1_5x` (benchmark) |
@@ -2646,13 +2646,13 @@ HistorySegment reconstruction and retention-point gating need run/unit identity 
 - **Test:** `TestCON_023_RefusesInPlaceRemovalOnCompleteHistory` (unit)
 - **Owner:** hephaestus
 
-**T-0217** Implement ErasureRecord wire shape (provisional salted-commitment form)
+**T-0217** Implement ErasureRecord wire shape (salted-commitment form)
 
-> Implement ErasureRecord (data-model.md 2.17) using the provisional salted-commitment digest form per plan.md Section 9 Conflict 1, NOT FR-061's literal bare unsalted digest. Reuse the salted-commitment digest formula already built by M11 (T-0187) rather than reimplementing it independently. This is a disclosed, unresolved conflict (FR-061's literal text vs FR-075's 2^80 hiding-floor requirement) pending an explicit Eyvar/themis ruling before phase 5 (analyze) closes -- do not silently resolve by picking a side. Implement exactly the salted form plan.md proposes and record the open conflict in the record's doc comment. Gated on T-0190 (analysis-phase finding: no task previously enforced that the ruling-request actually lands before this diverging wire format ships in the conformance corpus) so the conformance freeze cannot complete ahead of clarify.md recording the open ruling.
+> Implement ErasureRecord (data-model.md 2.17) using the salted-commitment digest form per plan.md Section 9 Conflict 1, which is now FR-061's own frozen text (amended 2026-09-15, Eyvar's ruling recorded via T-0190). Reuse the salted-commitment digest formula already built by M11 (T-0187) rather than reimplementing it independently. Gated on T-0190 so the conformance freeze does not complete ahead of clarify.md recording the ruling, even though the ruling has now landed.
 
 - **Implements:** FR-061
 - **Depends on:** T-0209, T-0187, T-0190
-- **DoD:** ErasureRecord encodes/decodes the salted-commitment form byte-exact per plan.md's Conflict-1 proposal, reusing M11's (T-0187) digest formula rather than a reimplementation; the doc comment and this task's test both cite the open FR-061/FR-075 conflict so it is not mistaken for a settled reading.
+- **DoD:** ErasureRecord encodes/decodes the salted-commitment form byte-exact per FR-061's amended text, reusing M11's (T-0187) digest formula rather than a reimplementation.
 - **Test:** `TestFR_061_ErasureRecordSaltedCommitmentForm` (unit)
 - **Owner:** mnemosyne
 
@@ -2952,7 +2952,7 @@ Font-less deterministic rendering needs validate (M07) for structural safety and
 | T-0250 | Knuth-Plass reflow engine over in-document break/hyphenation table | FR-100, NFR-022 | None | hephaestus | `TestFR_100_ReflowDeterministicLineBreaks` (unit) |
 | T-0251 | Reflow viewport support down to 320 reference pixels with no undeclared 2D scroll | FR-098 | T-0250 | hephaestus | `TestFR_098_ReflowNoScrollBelow320px` (integration) |
 | T-0252 | Deterministic glyph shaping via pinned, versioned external oracle | NFR-021 | T-0245, T-0253 | hephaestus | `TestNFR_021_ShapingDeterministicGivenPinnedOracle` (unit) |
-| T-0253 | Record the CON-006/CQ-006 shaping-oracle exception (EX-001) | CON-006 | None | clio | `TestCON_006_ShapingExceptionRecorded` (conformance) |
+| T-0253 | Record the CP-009/CON-006 shaping-oracle exception in clarify.md | CON-006 | None | clio | `TestCON_006_ShapingExceptionRecorded` (conformance) |
 | T-0254 | Author PLP-1 exhaustive decode conformance vectors before the decoder exists | NFR-017 | None | momus | `plp1_decode_conformance_corpus_frozen` (conformance) |
 | T-0255 | PLP-1 lossy codec decoder | NFR-017 | T-0254 | hephaestus | `TestPLP1_DecoderPassesConformanceCorpus` (conformance) |
 | T-0256 | Restricted-PNG lossless profile decoder | NFR-017 | None | hephaestus | `TestRestrictedPNG_DecodeConformance` (conformance) |
@@ -2965,7 +2965,7 @@ Font-less deterministic rendering needs validate (M07) for structural safety and
 | T-0263 | Per-page render octet-read budget (<=8 MiB + resources) | NFR-018 | T-0262 | hephaestus | `BenchmarkNFR_018_RenderPageOctetReadBudget` (benchmark) |
 | T-0264 | At-limit/over-limit conformance fixtures for render-layer record shapes | FR-089, NFR-010 | T-0242, T-0245 | momus | `render_layer_at_limit_conformance_corpus` (conformance) |
 | T-0265 | Continuous fuzzing harness for PLP-1 and restricted-PNG decode paths | NFR-017 | T-0255, T-0256 | prometheus | `FuzzPLP1Decode` (fuzz) |
-| T-0266 | Isolate the shaping-oracle sub-slice so it cannot block the core render path (EX-001 blast-radius) | CON-006 | T-0248, T-0250, T-0255, T-0256, T-0247, T-0252 | hephaestus | `TestEX001_ShapingIsolationDoesNotBlockCoreRenderPath` (integration) |
+| T-0266 | Isolate the shaping-oracle sub-slice so it cannot block the core render path | CON-006 | T-0248, T-0250, T-0255, T-0256, T-0247, T-0252 | hephaestus | `TestEX001_ShapingIsolationDoesNotBlockCoreRenderPath` (integration) |
 
 **T-0242** PageDirectory entity keyed by content identity, not absolute page ordinal
 
@@ -3069,21 +3069,21 @@ Font-less deterministic rendering needs validate (M07) for structural safety and
 
 **T-0252** Deterministic glyph shaping via pinned, versioned external oracle
 
-> Implement glyph selection/positioning as a pure function of (font digest, variation axes, scalars, layout features, language) against the CQ-006 option-B pinned shaping oracle identified by Header.shaping-profile-id. BLOCKED: cannot close until T-0253's EX-001 exception is on record (plan.md Section 9 Conflict 2, CON-006 vs CQ-006).
+> Implement glyph selection/positioning as a pure function of (font digest, variation axes, scalars, layout features, language) against the CQ-006 option-B pinned shaping oracle identified by Header.shaping-profile-id. UNBLOCKED at phase 5 (analyze): Eyvar approved a constitutional amendment (CP-009 v0.2.0, 2026-09-15) adding a narrow exception for a pinned, versioned external artefact cited as a byte-exact determinism oracle, which this construction satisfies (exact algorithm version and Unicode version pinned, cited for reproducibility, not for compatibility with a named application). T-0253 now records this in clarify.md rather than seeking a one-time EX-001 exception.
 
 - **Implements:** NFR-021
 - **Depends on:** T-0245, T-0253
-- **DoD:** Given a fixed input tuple and pinned oracle version, shaping output is byte-identical across repeated invocations and across two build targets; task cannot be marked done until EX-001 is approved.
+- **DoD:** Given a fixed input tuple and pinned oracle version, shaping output is byte-identical across repeated invocations and across two build targets.
 - **Test:** `TestNFR_021_ShapingDeterministicGivenPinnedOracle` (unit)
 - **Owner:** hephaestus
 
-**T-0253** Record the CON-006/CQ-006 shaping-oracle exception (EX-001)
+**T-0253** Record the CP-009/CON-006 shaping-oracle exception in clarify.md
 
-> Surface plan.md's self-disclosed Conflict 2 (CON-006's zero-named-reference rule vs. CQ-006 option B's pinned external shaping oracle) to Eyvar for an explicit, recorded, expiring exception (EX-001) scoped only to the shaping algorithm. Do not resolve the conflict unilaterally — flag and wait for ruling per this phase's constraints.
+> Superseded at phase 5 (analyze): Eyvar ruled directly on plan.md's self-disclosed Conflict 2 (CON-006/CP-009's zero-named-reference rule vs. CQ-006 option B's pinned external shaping oracle) by amending CP-009 itself (v0.2.0, 2026-09-15) with a standing exception clause, rather than a one-time expiring EX-001 exception. This task now records that ruling in clarify.md — the constitutional text is the exception; this is the audit trail — and confirms CON-006 (spec.md, mirrors CP-009's rule at the requirement level) is read consistently with CP-009's exception rather than left apparently stricter than the constitution it implements.
 
 - **Implements:** CON-006
 - **Depends on:** None
-- **DoD:** clarify.md contains a committed EX-001 record with non-empty scope, expiry, approver, and date fields, verified by an automated fixture check against the committed file; absent that record, the check fails and NFR-021/T-0252 stay blocked.
+- **DoD:** clarify.md contains a dated entry naming CP-009 v0.2.0's exception clause, citing the constitution amendment log entry, and stating that CON-006 is satisfied by the same reasoning for the shaping construction specifically; verified by an automated fixture check against the committed file.
 - **Test:** `TestCON_006_ShapingExceptionRecorded` (conformance)
 - **Owner:** clio
 
@@ -3207,9 +3207,9 @@ Font-less deterministic rendering needs validate (M07) for structural safety and
 - **Test:** `FuzzPLP1Decode` (fuzz)
 - **Owner:** prometheus
 
-**T-0266** Isolate the shaping-oracle sub-slice so it cannot block the core render path (EX-001 blast-radius)
+**T-0266** Isolate the shaping-oracle sub-slice so it cannot block the core render path
 
-> Per plan.md Section 9's disclosed blast-radius note: EX-001 (T-0253, CON-006 exception) gates only the shaping sub-slice, not the rasterizer, PLP-1/PNG decode, reflow, or fixed pagination. Structure the render pipeline so glyph shaping (T-0252) sits behind an interface the rest of the pipeline does not depend on, so those other pieces ship and test green even while T-0252/T-0253 remain blocked on Eyvar's EX-001 ruling.
+> Per plan.md Section 9's disclosed blast-radius note: the CP-009/CON-006 shaping-oracle exception (now standing constitutional text, T-0253) gates only the shaping sub-slice, not the rasterizer, PLP-1/PNG decode, reflow, or fixed pagination. Structure the render pipeline so glyph shaping (T-0252) sits behind an interface the rest of the pipeline does not depend on, so those other pieces ship and test green independently of shaping's own implementation schedule. Kept even though T-0252/T-0253 are no longer ruling-blocked, since the isolation itself is good architecture regardless.
 
 - **Implements:** CON-006
 - **Depends on:** T-0248, T-0250, T-0255, T-0256, T-0247, T-0252
@@ -4330,14 +4330,14 @@ RESOLVED at phase 5 (analyze), see `analysis.md` for the full record:
 - The M07-to-M08 dependency gap for the `storage_integrity_tree` validate check is closed: M07's milestone table now depends on M08, and T-0366 wires T-0131's T_S recomputation into the validate pipeline.
 - T-0304's RescindResignRecord description previously claimed a free-text "reason" and a raw wall-clock "timestamp" that were never part of data-model.md 2.18's actual entity and would have been a CP-004 violation had they been added to the wire shape; the description now names only the entity's real five fields.
 - CP-012's fuzzing-governance precondition (a named triage owner and published 90-day disclosure SLA) now has a task (T-0372), gated into T-0358.
-- T-0217 now depends on T-0190 so the provisional salted-commitment wire format cannot finish its conformance freeze ahead of the FR-061/FR-075 ruling request landing in clarify.md.
+- T-0217 depends on T-0190, which now records the FR-061/FR-075 ruling (resolved, see below) rather than tracking an open one.
 
-STILL OPEN, needing Eyvar's ruling before the affected work proceeds (see `analysis.md` section 6 for full detail):
-- CP-009 has no exception mechanism, but T-0252's shaping-oracle task requires one; needs a constitutional amendment or reopening CQ-006.
-- `PD-NORM-001` (spec.md) vs `PD-NFC-001`/`PD-NFC-002` (contracts/document.abnf, data-model.md) name the same rule two ways; needs a ruling on which is canonical.
-- FR-061's frozen text (bare unsalted digest) still conflicts with the provisional salted-commitment form T-0187/T-0217 build against; needs approval of the salted form (amending FR-061) or a hold on that work.
-- CON-018's three reader-conformance roles each need "their own trial" (CP-002), but only two trial tasks exist (T-0345 combined extracting-and-validating, T-0346 rendering); needs confirmation the combined trial satisfies both roles' obligation.
-- PageDirectory (data-model.md 2.22) has no assigned wire discriminant, unlike its sibling UnitIndexLeaf (0x0A) — plausibly a legitimate asymmetry (PageDirectory is genuinely lazy-rebuilt, bounded by MAX_PAGES, unlike UnitIndex's NFR-012 extraction-budget role) rather than a bug; needs a ruling on whether that asymmetry is intentional or PageDirectory should also get a discriminant.
+RULED ON by Eyvar 2026-09-15, recorded in `clarify.md` CQ-013..CQ-017 (see `analysis.md` section 9 for full detail):
+- CQ-013: CP-009 amended (v0.2.0) with a narrow pinned-external-artefact-as-determinism-oracle exception. T-0252/T-0253/T-0266 updated; no longer blocked.
+- CQ-014: `PD-NFC-001`/`PD-NFC-002` ruled canonical; `spec.md`'s CON-002 verify clause corrected from `PD-NORM-001`.
+- CQ-015: FR-061 amended to require the salted-commitment digest form, matching what was already built. T-0187/T-0190/T-0217/T-0218 updated to drop "provisional"/"pending ruling" framing.
+- CQ-016: PageDirectory's missing wire discriminant confirmed intentional (data-model.md 2.22 updated with the ruling). No discriminant assigned.
+- CQ-017: the combined NFR-026 extracting-and-validating trial (T-0345) confirmed to satisfy CON-018's obligation for both named roles. No new trial task added.
 
 Not yet re-verified against the current file (accurate as of the pre-phase-5 task set, may already be addressed by the above):
 - Coverage concentration: FR-070 has 12 implementing tasks, FR-063 has 12, TR-012 has 15, FR-003 has 12 — verify these aren't double-billing the same work across split tasks vs. genuinely incremental build-up.

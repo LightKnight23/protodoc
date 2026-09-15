@@ -1,6 +1,6 @@
 # Protodoc Constitution
 
-Status: ACTIVE — approved by Eyvar 2026-09-05 | Version: 0.1.0 | Date: 2026-09-05
+Status: ACTIVE — approved by Eyvar 2026-09-05, amended 2026-09-15 | Version: 0.2.0 | Date: 2026-09-15
 
 ## Purpose
 
@@ -63,6 +63,8 @@ Each semantic or presentational capability has exactly one normative construct. 
 The specification contains zero references to how a named application or application version behaves, and defines exactly one observable result per construct and per combination of constructs. Legacy ingest pressure is answered by converters with per-construct loss reports, never by compatibility switches.
 
 **Consequence:** A text search for product-behaviour references returning any result blocks the release. Import fidelity is a converter problem and stays permanently outside the format. No transitional or legacy conformance class is ever defined.
+
+**Exception (added 2026-09-15, v0.2.0):** A pinned, versioned external artefact may be cited as a determinism oracle, never as a compatibility target, when three conditions all hold: the artefact's version is frozen and named exactly (no "latest" or version range), the citation defines a byte-exact or otherwise mechanically checkable output rather than deferring to the external artefact's undocumented behaviour, and the specification's own text remains the complete, sufficient definition if the external artefact ever became unavailable (i.e. the oracle pins WHICH output is correct; it does not stand in for describing what that output is). The glyph-shaping construction (FR-021, plan.md PLP-1/shaping design) is the first use of this exception: it pins an exact versioned shaping algorithm and Unicode version as a reproducibility oracle, not as a reference to "how a named application behaves." This exception does not reopen CP-009's prohibition on defining behaviour by reference to a named APPLICATION (Word, Acrobat, etc.) or APPLICATION VERSION — only a versioned, spec-external algorithm or data artefact cited for byte-exact reproducibility qualifies.
 
 ### CP-010 Reference implementation in Go 1.25, standard library only in core paths
 
@@ -142,3 +144,4 @@ Quality is measured against ISO/IEC 25010 characteristics. The bars below are ga
 5. Principle identifiers `CP-NNN` are stable. A retired principle keeps its identifier and is marked retired with a date. Identifiers are never reused.
 6. A one-time exception to a principle, where the principle itself permits one, is recorded in the affected `plan.md` with the principle identifier, the reason and an expiry condition. An exception that has no expiry condition is an amendment and follows this process instead.
 7. Approval of this document at version 0.1.0 promotes it to Status: ACTIVE and unblocks phase 1 for the first Protodoc feature specification.
+8. Amendment log: v0.2.0 (2026-09-15, approved by Eyvar) added CP-009's pinned-external-artefact-as-determinism-oracle exception, closing the phase-5 analyze blocker against T-0252's shaping construction. A minor bump per rule 4 (a relaxed principle, no principle removed, no non-negotiable narrowed).

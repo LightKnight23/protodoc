@@ -230,3 +230,41 @@ All 197 requirements carry priority `must`. The must/should/could axis is unused
 - **Accepted:** 2026-09-05 by Eyvar.
 - **Reason:** Scope was cut at the boundary instead, in specification section 5.2 and in CQ-011, which moved converters and the live collaboration engine off the v1 critical path. What remains is the set without which the format's differentiating properties are not testable.
 - **Consequence:** Sequencing is carried entirely by task dependencies in `tasks.md`, not by requirement priority. Phase 4 must therefore produce an explicit dependency ordering; it cannot fall back on priority to decide what is built first. If phase 3 finds the remaining set still too large for one release, the correction is a scope decision under CP-002, not a silent re-tiering.
+
+## Phase 5 rulings (2026-09-15)
+
+Five judgment calls phase 5's `analysis.md` surfaced as blocking findings that could not be closed mechanically. Eyvar ruled on all five 2026-09-15; each adopted the recommended option.
+
+| ID | Question | Option adopted | Date |
+|---|---|---|---|
+| CQ-013 | CP-009 vs the pinned shaping oracle (T-0252) | Amend CP-009 | 2026-09-15 |
+| CQ-014 | PD-NORM-001 vs PD-NFC-001/002 rule-id conflict | PD-NFC-001/002 canonical | 2026-09-15 |
+| CQ-015 | FR-061 (bare digest) vs FR-075 (2^80 hiding floor) | Amend FR-061 to require the salted-commitment form | 2026-09-15 |
+| CQ-016 | PageDirectory's missing wire discriminant vs sibling UnitIndexLeaf | Intentional asymmetry, no discriminant assigned | 2026-09-15 |
+| CQ-017 | CON-018's three reader-role trials vs two existing trial tasks | Combined extracting-and-validating trial satisfies both named roles | 2026-09-15 |
+
+### CQ-013: CP-009 vs the pinned shaping oracle
+
+- **Question:** CP-009 bans any normative statement defined by another product's behaviour, with no exception mechanism. T-0252's glyph-shaping task needs to match a pinned, versioned external oracle's exact output. plan.md's own Conflict 2 disclosed this as unresolved.
+- **Resolution:** Amend CP-009 with a narrow standing exception (v0.2.0, `.specify/memory/constitution.md`) for a pinned, versioned external artefact cited strictly as a byte-exact determinism oracle, never as a compatibility target with a named application. T-0252/T-0253/T-0266 updated accordingly; CON-006 (spec.md's requirement-level mirror of the same rule) is read consistently with the same exception for this specific construction.
+- **Why not reopen CQ-006 instead:** Redesigning shaping from scratch is a materially larger scope change for a narrow, well-bounded exception; the amendment is auditable, narrow, and does not relax CP-009 for anything else.
+
+### CQ-014: PD-NORM-001 vs PD-NFC-001/002
+
+- **Question:** The same validator rule (rejecting a non-NFC text segment) is named `PD-NORM-001` in `spec.md`'s CON-002 verify clause, but `PD-NFC-001`/`PD-NFC-002` in `contracts/document.abnf` and `data-model.md`.
+- **Resolution:** `PD-NFC-001`/`PD-NFC-002` is canonical (already used consistently across two later, more detailed artifacts). `spec.md`'s CON-002 verify clause corrected to cite `PD-NFC-002` (the rule matching CON-002's actual behaviour: rejecting a value that fails NFC quick-check), with a note explaining the rename.
+
+### CQ-015: FR-061 vs FR-075
+
+- **Question:** FR-061's frozen text required a bare, unsalted severed-state digest; FR-075 requires a 2^80 hiding floor an unsalted digest cannot provide (it is a brute-force oracle over a small real-world candidate space). plan.md already proposed a salted-commitment form as the practical resolution, and `tasks.md` was already built against it as "provisional."
+- **Resolution:** Amend FR-061's frozen text to require the salted-commitment digest, matching what was already built. No implementation changes result, since the code was already built against this form; T-0187, T-0190, T-0217, T-0218 updated to drop "provisional"/"pending ruling" framing.
+
+### CQ-016: PageDirectory's missing wire discriminant
+
+- **Question:** `data-model.md` 2.22 (PageDirectory) has no assigned wire discriminant, unlike its sibling UnitIndexLeaf (`0x0A`). Is this a bug (an orphaned wire structure) or an intentional asymmetry?
+- **Resolution:** Intentional. PageDirectory is genuinely lazy-rebuilt on first page-oriented access and bounded by `MAX_PAGES = 131072`; unlike UnitIndex, it plays no role in NFR-012's 15%-octets-read extraction budget, so it has no need for the persisted, randomly-addressable structure a discriminant would enable. The existing M14 tasks (T-0242, T-0243, T-0244, T-0247) already correctly implement it as derived and non-normative, matching `data-model.md` 2.22's own existing classification. No discriminant is assigned; `data-model.md` 2.22 is treated as already correct.
+
+### CQ-017: CON-018's three reader-role trials
+
+- **Question:** CON-018 requires each of 3 reader conformance roles (extracting, validating-and-verifying, rendering) to get its own independent-implementer trial (CP-002). Only 2 trial tasks exist: T-0345 (a combined extracting-and-validating trial) and T-0346 (rendering). Does the combined trial satisfy both of its named roles' obligation?
+- **Resolution:** Yes. Validating-and-verifying is a strict superset of extracting in practice (a validator must extract content to check it), so one trial exercising both roles together satisfies CON-018's intent without needing a third, redundant standalone extracting-only trial. This reading is now the record; no new trial task is added.

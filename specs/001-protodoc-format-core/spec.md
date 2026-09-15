@@ -522,10 +522,10 @@ Every requirement below is normative and carries priority **must**. EARS pattern
 
 **FR-061** *(ubiquitous, must)*
 
-> The Protodoc format SHALL require a document to enumerate the identifier and digest of every previously published state that it can no longer reconstruct.
+> The Protodoc format SHALL require a document to enumerate the identifier and a salted-commitment digest of every previously published state that it can no longer reconstruct.
 
-- **Why:** A severed state must be distinguishable from a state that never existed, or a verifier presented with a signature over an earlier state cannot say whether the file is the wrong one or the history was lawfully trimmed.
-- **Verify:** Test T-SEVER: after publish and after trimming, every severed state is enumerated with its identifier and digest; two implementations produce identical enumerations.
+- **Why:** A severed state must be distinguishable from a state that never existed, or a verifier presented with a signature over an earlier state cannot say whether the file is the wrong one or the history was lawfully trimmed. Amended 2026-09-15 (Eyvar's ruling, recorded in clarify.md): the original text required a bare digest, which conflicted with FR-075's 2^80 hiding-floor requirement — an unsalted digest is a brute-force oracle over the small candidate space of real-world severed-state identifiers, exactly the exposure FR-075 exists to close. The salted-commitment form (already plan.md's proposed resolution, already what tasks.md builds) is now the frozen text; no implementation changes as a result of this amendment, since the code was already built against this form.
+- **Verify:** Test T-SEVER: after publish and after trimming, every severed state is enumerated with its identifier and salted-commitment digest; two implementations produce identical enumerations and identical digests for identical (salt, state) inputs.
 
 **FR-062** *(unwanted-behavior, must)*
 
@@ -1229,7 +1229,7 @@ Every requirement below is normative and carries priority **must**. EARS pattern
 > The Protodoc format SHALL require every addressable text segment and every identifier string to be in Unicode Normalization Form C independently, with no normalisation applied across segment boundaries.
 
 - **Why:** Normalisation changes scalar counts, so an implicit renormalisation on save relocates anchors with no exception thrown. Per-segment scoping is required because the forms are not closed under concatenation: two authors inserting individually normalised text at adjacent positions would otherwise produce a state no conforming writer may serialise.
-- **Verify:** Validator rule PD-NORM-001 with negative corpus N-NORM including combining marks and Hangul jamo at concurrent-insertion boundaries: every non-normalised segment is rejected at the first offending position before any digest is computed.
+- **Verify:** Validator rule PD-NFC-002 (renamed from an earlier draft's PD-NORM-001 at phase 5 analyze; contracts/document.abnf and data-model.md already used PD-NFC-002, per Eyvar's ruling that the contracts/data-model naming is canonical) with negative corpus N-NORM including combining marks and Hangul jamo at concurrent-insertion boundaries: every non-normalised segment is rejected at the first offending position before any digest is computed.
 
 **CON-003** *(ubiquitous, must)*
 
