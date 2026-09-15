@@ -384,3 +384,82 @@ or with the flag: `"rescind_resign": {"prior_signature_id": "...", "new_param_se
 This table is the seed of `analysis.md`'s phase-5 traceability matrix (requirement -> task -> test ->
 file); it is not itself that matrix, and every row above still needs a `T-NNN` task identifier and a
 named test before phase 6 (Implement) may begin, per CP-001.
+
+## 14. Requirement-to-verb traceability table
+
+S13 above maps each verb to the requirements it satisfies; this section inverts that mapping to one row
+per requirement identifier, restricted to the FR/NFR/CON/TR ids S13 actually names (CP-*, CQ-*, DP-* and
+HC-* ids cited in S13's prose are constitution/clarification/plan/hard-constraint identifiers, not the
+FR/NFR/CON/TR scheme this table tracks, and are out of scope here). `pkg/cli/traceability.go` is a
+verbatim copy of this table's two columns, and `TestTR_012_TraceabilityTableMatchesDispatch`
+(`pkg/cli/traceability_test.go`) re-reads this table off disk at test time and fails the build the moment
+it disagrees with that copy, or names a verb the dispatch registry (`pkg/cli.Names()`, T-0325) does not
+have registered, or a registered verb is missing from every row's Verb(s) column.
+
+| Requirement ID | Verb(s) |
+|---|---|
+| FR-024 | merge |
+| FR-035 | extract |
+| FR-041 | extract |
+| FR-042 | extract |
+| FR-047 | extract |
+| FR-048 | extract |
+| FR-062 | verify |
+| FR-063 | sign, verify |
+| FR-064 | sign, verify |
+| FR-065 | sign, verify |
+| FR-066 | sign, verify |
+| FR-067 | sign, verify |
+| FR-068 | diff, sign, verify |
+| FR-069 | sign, verify |
+| FR-070 | sign, verify |
+| FR-071 | sign, verify |
+| FR-072 | verify |
+| FR-073 | verify |
+| FR-074 | redact, verify |
+| FR-075 | redact, verify |
+| FR-076 | redact, verify |
+| FR-077 | redact, verify |
+| FR-078 | redact, verify |
+| FR-080 | redact |
+| FR-081 | redact |
+| FR-089 | sign |
+| FR-092 | merge |
+| FR-093 | merge |
+| FR-094 | merge |
+| FR-095 | merge |
+| FR-096 | merge |
+| FR-102 | validate |
+| FR-103 | validate |
+| FR-104 | validate, verify |
+| FR-105 | validate, verify |
+| FR-106 | validate |
+| FR-107 | validate |
+| FR-108 | validate |
+| FR-109 | validate |
+| FR-110 | validate |
+| FR-116 | merge |
+| FR-117 | validate |
+| FR-119 | migrate |
+| FR-120 | migrate |
+| FR-121 | migrate |
+| FR-122 | migrate |
+| FR-123 | migrate |
+| NFR-004 | publish |
+| NFR-012 | extract |
+| NFR-013 | extract |
+| NFR-014 | extract |
+| CON-003 | validate |
+| CON-009 | validate |
+| CON-010 | validate |
+| CON-011 | validate, verify |
+| TR-004 | project |
+| TR-005 | project |
+| TR-006 | inspect, validate |
+| TR-007 | inspect, validate |
+| TR-008 | inspect, validate |
+| TR-011 | extract |
+
+Every one of TR-012's 11 verbs (`validate`, `inspect`, `extract`, `verify`, `diff`, `merge`, `project`,
+`redact`, `publish`, `sign`, `migrate`) appears in the Verb(s) column of at least one row above; the CI
+check named at the top of this section asserts this mechanically rather than by inspection.
