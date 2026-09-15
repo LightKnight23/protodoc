@@ -115,6 +115,27 @@ func TestFR_010_CapabilityRequiredExceedsWritten(t *testing.T) {
 	}
 }
 
+// TestFR_011_DurableClaimReadFromHeader is T-0005's named test.
+// Implements: FR-011.
+func TestFR_011_DurableClaimReadFromHeader(t *testing.T) {
+	for _, claim := range []bool{false, true} {
+		h := validHeader()
+		h.DurableClaim = claim
+		enc := h.Encode(nil)
+
+		// DoD: the leading 512 octets alone determine durable-claim, with
+		// zero further decode — DecodeHeader takes only the HeaderSize
+		// window and nothing else.
+		dec, err := DecodeHeader(enc[:HeaderSize])
+		if err != nil {
+			t.Fatalf("claim=%v: DecodeHeader: %v", claim, err)
+		}
+		if dec.DurableClaim != claim {
+			t.Errorf("claim=%v: DurableClaim = %v after round-trip", claim, dec.DurableClaim)
+		}
+	}
+}
+
 func TestPD_DURABLE_001_RejectsInvalidOctet(t *testing.T) {
 	h := validHeader()
 	enc := h.Encode(nil)
