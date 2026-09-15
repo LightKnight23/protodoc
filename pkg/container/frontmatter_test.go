@@ -199,6 +199,66 @@ func TestFR_052_PreviewDigestCoversRenderInputs(t *testing.T) {
 	}
 }
 
+// TestFR_053_PreviewDigestMismatchReportsStale is T-0014's named test.
+// Implements: FR-053.
+func TestFR_053_PreviewDigestMismatchReportsStale(t *testing.T) {
+	fm := fixtureFrontmatter()
+	fm.PreviewKind = PreviewKindPLP1
+	fm.PreviewRaster = []byte{1, 2, 3}
+	fm.PreviewDigest = ComputeFrontmatterPreviewDigest(fm)
+
+	// Sanity: an unmutated fixture reports OK and returns the raster.
+	raster, status := FrontmatterPreview(fm)
+	if status != PreviewOK {
+		t.Fatalf("status = %v, want PreviewOK", status)
+	}
+	if string(raster) != string(fm.PreviewRaster) {
+		t.Fatalf("raster = %v, want %v", raster, fm.PreviewRaster)
+	}
+
+	// Deliberately mismatch fm-preview-digest against its in-window
+	// inputs (mutate title after the digest was recorded, as a stale
+	// cached preview would look on disk).
+	stale := *fm
+	stale.Title = stale.Title + " (revised)"
+
+	raster, status = FrontmatterPreview(&stale)
+	if status != PreviewStale {
+		t.Fatalf("status = %v, want PreviewStale", status)
+	}
+	if raster != nil {
+		t.Fatalf("raster = %v, want nil: FR-053 forbids returning the raw preview bytes on mismatch", raster)
+	}
+
+	// The stale record must still round-trip through the wire encoding
+	// unchanged (staleness is a consumer-side verdict, not a decode
+	// rejection: a bounded-prefix consumer reads no further and renders
+	// nothing, but the record itself is well-formed).
+	enc, err := stale.Encode(nil)
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	dec, err := DecodeFrontmatter(enc)
+	if err != nil {
+		t.Fatalf("DecodeFrontmatter: %v", err)
+	}
+	raster, status = FrontmatterPreview(dec)
+	if status != PreviewStale || raster != nil {
+		t.Fatalf("decoded stale record: status=%v raster=%v, want PreviewStale/nil", status, raster)
+	}
+}
+
+func TestFrontmatterPreview_AbsentWhenNoPayload(t *testing.T) {
+	fm := fixtureFrontmatter() // no PreviewKind/PreviewRaster set
+	raster, status := FrontmatterPreview(fm)
+	if status != PreviewAbsent {
+		t.Fatalf("status = %v, want PreviewAbsent", status)
+	}
+	if raster != nil {
+		t.Fatalf("raster = %v, want nil", raster)
+	}
+}
+
 func TestDecodeFrontmatter_RejectsNonzeroPadding(t *testing.T) {
 	fm := fixtureFrontmatter()
 	enc, err := fm.Encode(nil)

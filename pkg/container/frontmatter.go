@@ -332,3 +332,41 @@ func ComputeFrontmatterPreviewDigest(fm *Frontmatter) pdlfmt.Digest256 {
 	buf = append(buf, fm.Language...)
 	return pdlfmt.Digest256(sha256.Sum256(buf))
 }
+
+// PreviewStatus is the closed 3-value verdict a bounded-prefix consumer
+// reports for fm's preview payload (FR-053). It is a distinct type from
+// the raw preview bytes on purpose: FR-053 requires "stale" to be a
+// reportable outcome in its own right, never inferred by the caller from
+// an error or from empty bytes.
+type PreviewStatus int
+
+const (
+	// PreviewAbsent means fm carries no preview payload at all (fm-preview-kind
+	// and fm-preview-raster both absent) — distinct from PreviewStale, which
+	// means a payload IS present but its recorded digest does not verify.
+	PreviewAbsent PreviewStatus = iota
+	// PreviewOK means fm's preview payload is present and its recorded
+	// fm-preview-digest matches ComputeFrontmatterPreviewDigest(fm).
+	PreviewOK
+	// PreviewStale means fm's preview payload is present but its recorded
+	// fm-preview-digest does NOT match a fresh recomputation over fm's
+	// current document_metadata fields (FR-053).
+	PreviewStale
+)
+
+// FrontmatterPreview reports fm's preview payload status (FR-053) and
+// returns the preview raster bytes ONLY when that status is PreviewOK.
+// On PreviewStale or PreviewAbsent it returns a nil slice: this function
+// is the sole gate a bounded-prefix consumer uses to reach fm.PreviewRaster,
+// so there is exactly one path to the raw bytes and it is closed whenever
+// the digest does not verify — never displaying a stale payload and never
+// silently re-deriving a replacement (FR-053 forbids both).
+func FrontmatterPreview(fm *Frontmatter) ([]byte, PreviewStatus) {
+	if fm.PreviewKind == 0 && len(fm.PreviewRaster) == 0 {
+		return nil, PreviewAbsent
+	}
+	if fm.PreviewDigest != ComputeFrontmatterPreviewDigest(fm) {
+		return nil, PreviewStale
+	}
+	return fm.PreviewRaster, PreviewOK
+}
