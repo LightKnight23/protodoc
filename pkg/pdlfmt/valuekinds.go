@@ -10,6 +10,46 @@ import (
 // Digest256 is a SHA-256 output (contracts/container.abnf: digest256 = 32OCTET).
 type Digest256 [32]byte
 
+// UnitID is a 16-octet opaque content-unit identity (contracts/
+// container.abnf: unit-id = 16OCTET; alphabet = all 256 octet values;
+// CON-008). It carries no hierarchical, path, case-folding, escaping, or
+// parent-traversal semantics, and no ordering: two unit-ids are the same
+// identity only by exact octet comparison over the complete 16-octet
+// value, which is the only comparison this type exposes (Equal). Do not
+// add a second comparison method (Less, Compare, HasPrefix, EqualFold, or
+// similar) — TestCON_008_UnitIdOpaqueExactEqualityOnly fails if one
+// exists.
+type UnitID [16]byte
+
+// Equal reports whether id and other are the same unit-id, by exact
+// octet comparison over the complete 16-octet value (CON-008).
+func (id UnitID) Equal(other UnitID) bool {
+	return id == other
+}
+
+// Bytes returns id's 16 raw octets as a newly allocated slice.
+func (id UnitID) Bytes() []byte {
+	return append([]byte(nil), id[:]...)
+}
+
+// AppendUnitID appends id's 16 raw octets to dst. unit-id has no length
+// prefix of its own: it is always a fixed 16 octets, whether used as a
+// whole field-value or nested in a larger structure.
+func AppendUnitID(dst []byte, id UnitID) []byte {
+	return append(dst, id[:]...)
+}
+
+// DecodeUnitID decodes a fixed 16-octet unit-id from the start of src,
+// returning the value and octets consumed (always 16 on success).
+func DecodeUnitID(src []byte) (UnitID, int, error) {
+	var id UnitID
+	if len(src) < 16 {
+		return id, 0, fmt.Errorf("pdlfmt: unit-id needs 16 octets, got %d", len(src))
+	}
+	copy(id[:], src[:16])
+	return id, 16, nil
+}
+
 // ErrInvalidUTF8 is returned when a decoded nfc-string is not well-formed UTF-8.
 var ErrInvalidUTF8 = errors.New("pdlfmt: nfc-string value is not valid UTF-8")
 
