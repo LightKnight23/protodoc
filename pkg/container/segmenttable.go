@@ -29,9 +29,12 @@ const (
 )
 
 // Segment type octets (container.abnf S5 slot-segment-type). 0 is the
-// normative "unused slot" marker, never a real segment kind; 5-255 is a
-// reserved range this struct definition does not itself reject (T-0023
-// owns the closed-enum rejection rule, TR-008).
+// normative "unused slot" marker, never a real segment kind. 1-4 are the
+// closed 4-value segment-type enum {CONTENT, RESOURCE, HISTORY, ATTEST}
+// (TR-008): decodeSegmentTableSlot rejects every other octet value
+// structurally, by range check alone, so the leading 1,048,576 octets
+// never carry a construct a conforming reader would execute, interpret,
+// or dereference as anything but one of these five closed values.
 const (
 	SegmentTypeUnused   = 0
 	SegmentTypeContent  = 1
@@ -39,6 +42,11 @@ const (
 	SegmentTypeHistory  = 3
 	SegmentTypeAttest   = 4
 )
+
+// ErrInvalidSegmentType is returned when a decoded slot-segment-type octet
+// falls outside the closed enum {0 unused, 1 CONTENT, 2 RESOURCE,
+// 3 HISTORY, 4 ATTEST} (TR-008).
+var ErrInvalidSegmentType = errors.New("container: slot-segment-type outside closed enum {0..4}")
 
 // SlotFlagCoverageHint is slot-flags bit0 (container.abnf S5): a coverage
 // HINT only, never authoritative on its own (authoritative coverage is
@@ -94,6 +102,9 @@ func decodeSegmentTableSlot(src []byte) (SegmentTableSlot, error) {
 	var slot SegmentTableSlot
 	if len(src) != SegmentTableSlotSize {
 		return slot, fmt.Errorf("container: slot decode buffer is %d octets, want %d", len(src), SegmentTableSlotSize)
+	}
+	if src[0] > SegmentTypeAttest {
+		return slot, fmt.Errorf("container: slot-segment-type %d: %w", src[0], ErrInvalidSegmentType)
 	}
 	slot.SegmentType = src[0]
 	slot.Flags = src[1]
