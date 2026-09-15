@@ -1,0 +1,77 @@
+Protodoc Specification Licence (Draft v0.1)
+Status: DRAFT -- pending Eyvar Garcia's review and approval (see GOVERNANCE.md
+and specs/CHANGES.md for the approval record once it exists; this document
+records no approval of its own).
+
+This licence covers the Protodoc specification text and reference materials
+in this repository under specs/001-protodoc-format-core/ and
+.specify/memory/constitution.md (the "Specification"), and, separately, the
+patent claims described in Section 2 below. It does not cover this
+repository's reference-implementation source code, which is licensed
+separately (see the licence header in the reference-implementation
+directories once code exists, per CLAUDE.md's phase-6 gate).
+
+1. Copyright licence (Specification text)
+
+   Subject to the terms of this licence, the copyright holder grants to
+   every person obtaining a copy of the Specification a worldwide,
+   royalty-free, non-exclusive, irrevocable licence to reproduce, prepare
+   derivative works of, publicly display, publicly perform, sublicense and
+   distribute the Specification, provided that:
+
+   a. this licence notice and the copyright notice are retained in all
+      copies or substantial portions of the Specification; and
+   b. a derivative work that modifies the normative requirements of the
+      Specification is clearly marked as a derivative and not represented
+      as the Specification itself.
+
+2. Patent licence (irrevocable, royalty-free)
+
+   Subject to the terms of this licence, each contributor to the
+   Specification grants to every person who implements, in whole or in
+   part, any version of the Specification a worldwide, royalty-free,
+   non-exclusive, irrevocable (except as stated in Section 2(a)) licence
+   under that contributor's necessary patent claims -- those patent claims
+   a contributor owns or controls that are necessarily infringed by
+   implementing the normative portions of the Specification, with no
+   reasonable non-infringing alternative -- to make, use, sell, offer for
+   sale, import and otherwise dispose of a conforming implementation of the
+   Specification.
+
+   a. This patent licence extends to a given implementer only for so long
+      as that implementer does not assert, in litigation or a formal
+      demand, that a conforming implementation of the Specification (by
+      any party) infringes a patent claim owned or controlled by that
+      implementer. Asserting such a claim terminates the patent licence
+      granted to that implementer under this Section 2, but has no effect
+      on any other implementer's licence.
+   b. This patent licence survives a contributor ceasing to participate in
+      the Specification's governance; it cannot be revoked by a change of
+      steward, a change of governance process, or the Specification
+      reaching or leaving any particular status (draft, stable,
+      deprecated).
+
+3. No trademark licence
+
+   This licence does not grant rights to use the "Protodoc" name, or any
+   associated logo, to endorse or promote an implementation, except to
+   truthfully describe the origin of the Specification an implementation
+   conforms to.
+
+4. Disclaimer of warranty
+
+   THE SPECIFICATION IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+   IN NO EVENT SHALL A CONTRIBUTOR BE LIABLE FOR ANY CLAIM, DAMAGES OR
+   OTHER LIABILITY ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+   SPECIFICATION OR ANY IMPLEMENTATION OF IT.
+
+5. Governance cross-reference
+
+   The named steward, succession arrangement and deprecation-window policy
+   required alongside this licence by CON-026 are recorded in GOVERNANCE.md
+   in this repository, not in this file, so that a governance-process change
+   never requires re-issuing the licence text itself.
+
+Copyright (c) 2026 Eyvar Garcia and Protodoc contributors.
