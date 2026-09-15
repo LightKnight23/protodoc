@@ -21,22 +21,29 @@ import (
 //     does appear in the corpus is not -- proving FindGaps fails closed
 //     rather than accepting or rejecting everything indiscriminately.
 func TestNFR_029_TraceabilityCheckerParsesAllRuleIDs(t *testing.T) {
+	// Deliberately out-of-range numbers (999) so these fixture ids can
+	// never collide with a real id this same audit later finds while
+	// scanning this module's own source for coverage (ScanCoverage has no
+	// notion of "this occurrence is only a test fixture" -- a real-looking
+	// id typed into this file's own text would otherwise mark itself
+	// falsely "covered" the moment a real Audit walks pkg/traceability
+	// too).
 	const specSnippet = `
-**FR-042** *(ubiquitous, must)*
+**FR-999** *(ubiquitous, must)*
 
-> Some requirement text mentioning CON-007 and NFR-013 in passing.
+> Some requirement text mentioning CON-999 and NFR-999 in passing.
 
-Validator rule PD-RING-001 rejects this. Validator rule PD-A11Y-002 and
-PD-2D-001 also apply. TR-006 governs the fixed prefix.
+Validator rule PD-RINGFIX-999 rejects this. Validator rule PD-A11YFIX-999
+and PD-2DFIX-999 also apply. TR-999 governs the fixed prefix.
 `
 	gotReq := ExtractRequirementIDs(specSnippet)
-	wantReq := []string{"CON-007", "FR-042", "NFR-013", "TR-006"}
+	wantReq := []string{"CON-999", "FR-999", "NFR-999", "TR-999"}
 	if !reflect.DeepEqual(gotReq, wantReq) {
 		t.Errorf("ExtractRequirementIDs(specSnippet) = %v, want %v", gotReq, wantReq)
 	}
 
 	gotRule := ExtractRuleIDs(specSnippet)
-	wantRule := []string{"PD-2D-001", "PD-A11Y-002", "PD-RING-001"}
+	wantRule := []string{"PD-2DFIX-999", "PD-A11YFIX-999", "PD-RINGFIX-999"}
 	if !reflect.DeepEqual(gotRule, wantRule) {
 		t.Errorf("ExtractRuleIDs(specSnippet) = %v, want %v", gotRule, wantRule)
 	}
