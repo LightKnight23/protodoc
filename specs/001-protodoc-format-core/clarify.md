@@ -268,3 +268,34 @@ Five judgment calls phase 5's `analysis.md` surfaced as blocking findings that c
 
 - **Question:** CON-018 requires each of 3 reader conformance roles (extracting, validating-and-verifying, rendering) to get its own independent-implementer trial (CP-002). Only 2 trial tasks exist: T-0345 (a combined extracting-and-validating trial) and T-0346 (rendering). Does the combined trial satisfy both of its named roles' obligation?
 - **Resolution:** Yes. Validating-and-verifying is a strict superset of extracting in practice (a validator must extract content to check it), so one trial exercising both roles together satisfies CON-018's intent without needing a third, redundant standalone extracting-only trial. This reading is now the record; no new trial task is added.
+
+## Open ruling requests (awaiting Eyvar)
+
+Disclosed conflicts surfaced during phase 6 implementation whose adopted reading deviates from
+a requirement's literal text. Each is recorded here as an OPEN request so governance tracking
+of the deviation is consistent across milestones; none is resolved until Eyvar rules. Adopting
+the reading in code ahead of the ruling is permitted only because it is disclosed here and is
+reversible.
+
+| ID | Question | Adopted reading (provisional) | Status | Date requested |
+|---|---|---|---|---|
+| RR-NFR-030 | NFR-030's literal "peak memory <= 4x input octet length" is unsatisfiable with a zero floor on small inputs and at the prefix boundary | max(ArenaFloor, 4x inputLen), floor-exempted | OPEN — awaiting Eyvar | 2026-09-15 |
+
+### RR-NFR-030: NFR-030 memory-floor floor-exempted reading
+
+- **Question:** NFR-030 requires a conforming validator's peak memory not exceed four times the
+  input's octet length. Taken literally with a zero floor, this is unsatisfiable: no real
+  process validates a 1-octet input within 4 octets of resident memory, and even at the smallest
+  valid input (the fixed 1,048,576-octet prefix) the validator's unavoidable fixed arena (the
+  resident prefix, the decoded `[MaxSegments]SegmentTableSlot` array and its transient decode/walk
+  copies, one bounded segment window, the cycle-detection colour array) exceeds four times that
+  input. plan.md Section 9 Conflict 3 disclosed this as unresolved.
+- **Adopted reading (provisional, pending this ruling):** The bound is
+  `peak <= max(ArenaFloor, 4 * inputLen)`, where `ArenaFloor` is the validator's fixed arena
+  (~4.79 MiB, covering the measured ~4.07 MiB fixed transient with headroom). This is applied
+  consistently everywhere NFR-030 is checked (the T-0121 benchmark and T-0122 fuzz target), and
+  is documented in `pkg/validate/arena.go`.
+- **Cross-references:** plan.md Section 9 Conflict 3; T-0121 (the bounded validator arena and its
+  NFR-030 benchmark).
+- **Status:** OPEN — awaiting Eyvar's ruling. No fabricated resolution is recorded here; the
+  adopted reading is provisional and reversible until ruled upon.
