@@ -281,7 +281,7 @@ harness rather than an ABNF parser generator. The following is the intended CI s
 3. **Negative corpus per NORMATIVE reject rule.** Every `rule_id` named in these files (`PD-VARINT-001`,
    `PD-TLV-001`, `PD-SORT-001`, `PD-RING-001`, `PD-DISC-001`, `PD-COVER-001` through `004`, `PD-EXT-002`,
    `PD-BOUNDARY-001`, `PD-NFC-001`/`002`, `PD-INDEX-001`, `PD-SEGTYPE-001`, `PD-CAPPAIR-001`,
-   `PD-DURABLE-001`, `PD-MODE-001`, `PD-HDRZERO-001`) gets at least one hostile fixture proving the rule
+   `PD-DURABLE-001`, `PD-MODE-001`, `PD-HDRZERO-001`, `PD-LANG-001`) gets at least one hostile fixture proving the rule
    fires, contributing to CP-011's 200-hostile-case negative corpus floor and CP-002's per-role statement
    budget (each mapped `rule_id` is one countable normative statement). This list is generated, not
    hand-maintained: CI greps every `.abnf`/`.md` file in this directory for the `PD-[A-Z]+-[0-9]+` pattern
