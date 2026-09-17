@@ -113,3 +113,30 @@ func SplitRun(r Run, at int) (left, right Run, ok bool) {
 	}
 	return left, right, true
 }
+
+// CanMergeRuns reports whether adjacent runs a and b can merge back into
+// one: they must share run_id and be base_ordinal-contiguous, i.e.
+// b.BaseOrdinal == a.BaseOrdinal + a.ScalarLen() (a's end ordinal). This is
+// a pure syntactic predicate over the two runs' identity lineage with no
+// side channel: it inspects only run_id and base_ordinal arithmetic, never
+// content, actor, clock or session. It is the precondition MergeRuns
+// enforces and the exact condition SplitRun's two outputs satisfy.
+func CanMergeRuns(a, b Run) bool {
+	return a.RunID.Equal(b.RunID) && b.BaseOrdinal == a.EndOrdinal()
+}
+
+// MergeRuns merges adjacent runs a and b into one run iff CanMergeRuns(a,b),
+// returning the merged run and true, or the zero run and false otherwise.
+// The merged run keeps a's run_id and BaseOrdinal and concatenates the two
+// texts. MergeRuns is the exact left-inverse of SplitRun: for any run r and
+// valid split point at, MergeRuns(SplitRun(r, at)) reconstructs r exactly.
+func MergeRuns(a, b Run) (Run, bool) {
+	if !CanMergeRuns(a, b) {
+		return Run{}, false
+	}
+	return Run{
+		RunID:       a.RunID,
+		BaseOrdinal: a.BaseOrdinal,
+		Text:        a.Text + b.Text,
+	}, true
+}
