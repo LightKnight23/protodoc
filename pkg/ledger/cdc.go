@@ -133,3 +133,34 @@ func BoundaryOffsets(data []byte) []uint64 {
 	}
 	return offsets
 }
+
+// NovelChunkOctets returns the total octet length of the chunks the CDC
+// cuts over after that do not appear (by exact content) among the chunks
+// it cuts over before. This is the "novel chunk total" NFR-009 bounds: the
+// volume a content-defined sync layer must transfer to move a peer holding
+// before to after. Because CDC boundaries are content-defined, a small
+// edit perturbs only the chunk(s) overlapping it plus at most the shifted
+// boundary chunks adjacent to it, so novel octets stay proportional to the
+// edit rather than to the document size.
+//
+// Chunk identity is by exact content bytes: two chunks are "the same"
+// (non-novel) when their octets are identical, matched with multiplicity
+// so a chunk value present k times in before covers at most k occurrences
+// in after. This models a chunk store keyed by content digest.
+func NovelChunkOctets(before, after []byte) uint64 {
+	haveCounts := make(map[string]int)
+	for _, c := range ChunkBoundaries(before) {
+		haveCounts[string(before[c.Offset:c.Offset+c.Length])]++
+	}
+
+	var novel uint64
+	for _, c := range ChunkBoundaries(after) {
+		key := string(after[c.Offset : c.Offset+c.Length])
+		if haveCounts[key] > 0 {
+			haveCounts[key]--
+			continue
+		}
+		novel += c.Length
+	}
+	return novel
+}
