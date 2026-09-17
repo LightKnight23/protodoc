@@ -100,6 +100,13 @@ type PlaceResult struct {
 	// order, each carrying the ordinal, offset and length that segment was
 	// placed at.
 	Placements []Placement
+
+	// WrittenOctets is the total octets this commit writes to storage:
+	// the appended segment octets plus the fixed-prefix patch a real
+	// commit performs for this delta (one CommitRingRecord slot plus one
+	// touched SegmentTableSlot per new segment). It is the quantity
+	// NFR-008 bounds; see commitWriteCost and EnforceWriteBudget.
+	WrittenOctets uint64
 }
 
 var (
@@ -216,5 +223,9 @@ func place(prior []byte, priorSegmentCount uint64, delta EditDelta) (PlaceResult
 		pos += len(seg)
 	}
 
-	return PlaceResult{Image: out, Placements: placements}, nil
+	return PlaceResult{
+		Image:         out,
+		Placements:    placements,
+		WrittenOctets: commitWriteCost(uint64(appendLen), newCount),
+	}, nil
 }
