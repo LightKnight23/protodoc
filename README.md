@@ -21,20 +21,25 @@ are structural guarantees, not aspirations. Full case: [`specs/001-protodoc-form
 
 ## Status
 
-**Pre-code.** This project follows Spec-Driven Development: every requirement traces to a task, every task
-traces to a test, and none of that exists yet as code. See [`CLAUDE.md`](CLAUDE.md) for the exact phase-by-phase
-status and what's blocking implementation from starting.
+**Implementation in progress: 47 of 372 tasks done, verified against git history.** All specs (phases 0-5) are
+approved and frozen. Phase 6 (implement) is underway: milestone M01 (core encoding, fixed prefix) is complete
+and green; M18/M19 have a handful of tasks done but were built ahead of their real prerequisites and likely need
+rework; everything else (M02-M17: the ledger, identity/anchoring, signing, integrity trees, redaction, merge,
+rendering) does not exist yet. See [`CLAUDE.md`](CLAUDE.md) § "Phase 6 status" for the exact, git-verified
+breakdown, the real build order, and the discipline for continuing safely — **read it before writing any code.**
 
 | Artifact | What it is |
 |---|---|
-| [`.specify/memory/constitution.md`](.specify/memory/constitution.md) | 14 non-negotiable project principles |
+| [`.specify/memory/constitution.md`](.specify/memory/constitution.md) | 14 non-negotiable project principles (v0.2.0) |
 | [`specs/001-protodoc-format-core/spec.md`](specs/001-protodoc-format-core/spec.md) | 197 requirements, EARS notation, WHAT/WHY only |
-| [`specs/001-protodoc-format-core/clarify.md`](specs/001-protodoc-format-core/clarify.md) | 12 resolved design-fork decisions |
+| [`specs/001-protodoc-format-core/clarify.md`](specs/001-protodoc-format-core/clarify.md) | 17 resolved design-fork decisions |
 | [`specs/001-protodoc-format-core/plan.md`](specs/001-protodoc-format-core/plan.md) | Chosen architecture, HOW |
 | [`specs/001-protodoc-format-core/research.md`](specs/001-protodoc-format-core/research.md) | 5 competing architectures, why one won |
 | [`specs/001-protodoc-format-core/data-model.md`](specs/001-protodoc-format-core/data-model.md) | Entities, fields, ceilings, ordering rules |
 | [`specs/001-protodoc-format-core/contracts/`](specs/001-protodoc-format-core/contracts/) | Normative wire grammars (ABNF) + CLI contract |
-| [`specs/001-protodoc-format-core/tasks.md`](specs/001-protodoc-format-core/tasks.md) | 19 milestones, 365 implementation tasks |
+| [`specs/001-protodoc-format-core/tasks.md`](specs/001-protodoc-format-core/tasks.md) | 19 milestones, 372 implementation tasks |
+| [`specs/001-protodoc-format-core/analysis.md`](specs/001-protodoc-format-core/analysis.md) | Phase 5 cross-artifact consistency, gate PASSES |
+| [`scripts/extract_milestone_tasks.py`](scripts/extract_milestone_tasks.py) | Regenerates the per-milestone task breakdown + real topological build order from `tasks.md` |
 
 ## The architecture in one paragraph
 
@@ -53,18 +58,25 @@ and this format's signing story depends on that guarantee. Full detail, every re
 
 ```
 .specify/memory/constitution.md   Governing principles (read before any design or code decision)
-specs/001-protodoc-format-core/   The full spec-to-tasks pipeline for the core format (see table above)
-go.mod                            Bare Go 1.25 module — no source yet, intentionally
+specs/001-protodoc-format-core/   The full spec-to-tasks-to-analysis pipeline (see table above)
+scripts/extract_milestone_tasks.py  Regenerates .impl_tasks/ (gitignored) from tasks.md
+pkg/pdlfmt/                       PDL-VARINT, PDL-TLV, and value-kind wire primitives — done (M01)
+pkg/container/                    Header, CommitRingRecord, Frontmatter, SegmentTableSlot — done (M01)
+pkg/cli/, pkg/governance/, pkg/traceability/, pkg/diffconform/, pkg/fuzzmaturity/, pkg/benchconfig/, pkg/ceilings/
+                                  Partial M18/M19 work, built ahead of its real prerequisites — needs review
+cmd/                              CLI entry points for the packages above
+go.mod                            Go 1.25 module
 ```
-
-Implementation code (`internal/`, `pkg/`, `cmd/protodoc/`) does not exist yet. It appears once phase 5
-(analyze) has run and been approved — see `CLAUDE.md` for what that means concretely.
 
 ## For another LLM or agent picking this up
 
-Read [`CLAUDE.md`](CLAUDE.md) first — it has the exact current phase, two disclosed gaps in the current
-`tasks.md` that phase 5 needs to resolve, and the working conventions (ID schemes, commit author policy, house
-style) specific to this repo. This README is the orientation; `CLAUDE.md` is the operating manual.
+Read [`CLAUDE.md`](CLAUDE.md) first, specifically its "Phase 6 status" section — it has the exact, git-verified
+task completion state (not any prior session's self-report), the real topological build order, and the
+discipline for continuing safely (sequential implementation, one commit per task, honesty about tasks no agent
+can complete, constitution principles that bind every line of code). This README is the orientation; `CLAUDE.md`
+is the operating manual.
 
-Do not start writing implementation code on your own initiative. The project's own constitution (CP-001, "spec
-first, always") makes untraceable code a defect subject to removal, not a head start.
+Two things worth internalizing before writing anything: (1) an earlier automated pass over-reported its own
+completion — always verify against `git log`'s `Refs:` trailers, never trust a task list from conversation
+memory; (2) real Go code has compile-time coupling that markdown specs don't, so implement tasks strictly
+sequentially, never in parallel across shared packages.
