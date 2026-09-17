@@ -9,7 +9,7 @@ import "testing"
 // judged NFC on its own octets, and the illegal cross-boundary composition
 // is never applied.
 func TestCON_002_NFCScopingIsPerRunNotCrossBoundary(t *testing.T) {
-	rid, err := MintID()
+	rid, err := testMintID()
 	if err != nil {
 		t.Fatalf("MintID: %v", err)
 	}

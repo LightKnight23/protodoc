@@ -13,7 +13,7 @@ func makeRunSeq(t *testing.T, n int) []Run {
 	t.Helper()
 	runs := make([]Run, n)
 	for i := range runs {
-		rid, err := MintID()
+		rid, err := testMintID()
 		if err != nil {
 			t.Fatalf("MintID: %v", err)
 		}

@@ -13,9 +13,9 @@ import (
 // exactly one present unit is rejected (FR-084 stores target identity, not
 // frozen text); staleness is determined without computing layout (FR-085).
 func TestFR_084_CrossReferenceResolvesToOnePresentUnit(t *testing.T) {
-	xrefID, _ := MintID()
-	target, _ := MintID()
-	anchorRun, _ := MintID()
+	xrefID, _ := testMintID()
+	target, _ := testMintID()
+	anchorRun, _ := testMintID()
 
 	for _, kind := range []XrefKind{XrefInternalHyperlink, XrefCitation, XrefTableOfContentsEntry} {
 		x := CrossReference{

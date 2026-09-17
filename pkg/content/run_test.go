@@ -12,7 +12,7 @@ import (
 // with the same base_ordinal address different identities only by run_id,
 // never by any shared document-wide count.
 func TestCON_001_BaseOrdinalIsScalarValueScopedToSegment(t *testing.T) {
-	rid, err := MintID()
+	rid, err := testMintID()
 	if err != nil {
 		t.Fatalf("MintID: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestCON_001_BaseOrdinalIsScalarValueScopedToSegment(t *testing.T) {
 	// Segment-scoping: two runs in DIFFERENT segments may legitimately share
 	// the same base_ordinal; their character identities differ only by
 	// run_id, and there is no shared document-wide count relating them.
-	rid2, err := MintID()
+	rid2, err := testMintID()
 	if err != nil {
 		t.Fatalf("MintID: %v", err)
 	}

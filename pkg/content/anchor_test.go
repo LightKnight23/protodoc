@@ -111,8 +111,8 @@ func TestFR_025_AddressingIsContentIdentityOnly(t *testing.T) {
 // and AnchorOf builds an anchor from a run-internal index without persisting
 // that index.
 func TestFR_025_AnchorResolvesByIdentity(t *testing.T) {
-	rid, _ := MintID()
-	other, _ := MintID()
+	rid, _ := testMintID()
+	other, _ := testMintID()
 	r := Run{RunID: rid, BaseOrdinal: 100, Text: "hello"}
 
 	a, ok := AnchorOf(r, 2)

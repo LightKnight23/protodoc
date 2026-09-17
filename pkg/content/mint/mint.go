@@ -11,7 +11,7 @@
 // identity-stripping publish operation cannot detach an anchor by removing a
 // recoverable actor/session component. No code path re-mints or reissues a
 // previously returned value (FR-021).
-package content
+package mint
 
 import (
 	"crypto/rand"

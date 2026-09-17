@@ -54,7 +54,7 @@ func runOperationCampaign(t *testing.T, seed int64) {
 	runs := make([]Run, n)
 	lineage := map[pdlfmt.UnitID]struct{}{}
 	for i := range runs {
-		id, err := MintID()
+		id, err := testMintID()
 		if err != nil {
 			t.Fatalf("MintID: %v", err)
 		}

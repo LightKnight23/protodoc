@@ -28,7 +28,7 @@ func TestFR_020_SplitPreservesRunID(t *testing.T) {
 	r := rand.New(rand.NewSource(7))
 
 	for trial := 0; trial < 500; trial++ {
-		rid, err := MintID()
+		rid, err := testMintID()
 		if err != nil {
 			t.Fatalf("MintID: %v", err)
 		}
@@ -72,7 +72,7 @@ func TestFR_020_SplitPreservesRunID(t *testing.T) {
 // TestFR_020_SplitRejectsOutOfRange confirms an out-of-range split index is
 // rejected rather than silently clamped.
 func TestFR_020_SplitRejectsOutOfRange(t *testing.T) {
-	rid, _ := MintID()
+	rid, _ := testMintID()
 	run := Run{RunID: rid, BaseOrdinal: 5, Text: "hello"}
 	if _, _, ok := SplitRun(run, 6); ok {
 		t.Fatalf("split past end unexpectedly ok")

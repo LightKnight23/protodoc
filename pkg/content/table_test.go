@@ -12,19 +12,19 @@ import (
 // (row, col) pair, returning the table and its row/col id slices.
 func mkTable(t *testing.T, m, n int) Table {
 	t.Helper()
-	id, _ := MintID()
+	id, _ := testMintID()
 	tbl := Table{ID: id}
 	for i := 0; i < m; i++ {
-		rid, _ := MintID()
+		rid, _ := testMintID()
 		tbl.Rows = append(tbl.Rows, rid)
 	}
 	for j := 0; j < n; j++ {
-		cid, _ := MintID()
+		cid, _ := testMintID()
 		tbl.Columns = append(tbl.Columns, cid)
 	}
 	for i := 0; i < m; i++ {
 		for j := 0; j < n; j++ {
-			content, _ := MintID()
+			content, _ := testMintID()
 			tbl.Cells = append(tbl.Cells, CellEntry{Row: tbl.Rows[i], Col: tbl.Columns[j], Content: content})
 		}
 	}
@@ -58,7 +58,7 @@ func TestFR_082_TableGridTilesExactlyOnce(t *testing.T) {
 	}
 
 	// Cell naming an absent row is rejected naming the cell.
-	absentRow, _ := MintID()
+	absentRow, _ := testMintID()
 	bad := cloneTable(tbl)
 	bad.Cells[0].Row = absentRow
 	if err := bad.ValidateTiling(); !errors.Is(err, ErrTableCellUnknownRow) {
@@ -66,7 +66,7 @@ func TestFR_082_TableGridTilesExactlyOnce(t *testing.T) {
 	}
 
 	// Cell naming an absent column is rejected.
-	absentCol, _ := MintID()
+	absentCol, _ := testMintID()
 	bad = cloneTable(tbl)
 	bad.Cells[0].Col = absentCol
 	if err := bad.ValidateTiling(); !errors.Is(err, ErrTableCellUnknownColumn) {

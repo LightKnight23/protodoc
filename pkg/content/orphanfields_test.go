@@ -13,7 +13,7 @@ import (
 func TestFR_030_OrphanRecordCapturesAllFourFields(t *testing.T) {
 	order := make(DocumentOrder, 5)
 	for i := range order {
-		id, err := MintID()
+		id, err := testMintID()
 		if err != nil {
 			t.Fatalf("MintID: %v", err)
 		}

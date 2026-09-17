@@ -15,7 +15,7 @@ func TestFR_029_OrphanResolutionIsDeterministic(t *testing.T) {
 	// Document order: r0 r1 r2 r3 r4 r5.
 	order := make(DocumentOrder, 6)
 	for i := range order {
-		id, err := MintID()
+		id, err := testMintID()
 		if err != nil {
 			t.Fatalf("MintID: %v", err)
 		}

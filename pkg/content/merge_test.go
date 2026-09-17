@@ -14,7 +14,7 @@ func TestFR_020_MergeIsPureSyntacticPredicate(t *testing.T) {
 
 	// --- Merge is the exact left-inverse of split ---
 	for trial := 0; trial < 500; trial++ {
-		rid, err := MintID()
+		rid, err := testMintID()
 		if err != nil {
 			t.Fatalf("MintID: %v", err)
 		}
@@ -39,8 +39,8 @@ func TestFR_020_MergeIsPureSyntacticPredicate(t *testing.T) {
 	}
 
 	// --- Predicate is exactly run_id-match AND base_ordinal-contiguity ---
-	ridA, _ := MintID()
-	ridB, _ := MintID()
+	ridA, _ := testMintID()
+	ridB, _ := testMintID()
 	a := Run{RunID: ridA, BaseOrdinal: 10, Text: "abc"} // EndOrdinal 13
 
 	// Contiguous, same run_id: mergeable.

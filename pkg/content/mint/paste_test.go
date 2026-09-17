@@ -1,16 +1,30 @@
-package content
+package mint
 
 import (
 	"testing"
 
+	"Protodoc/pkg/content"
 	"Protodoc/pkg/pdlfmt"
 )
 
-// TestFR_022_PasteMintsFreshIdentity is T-0072's named test. It confirms
-// PasteContent and DuplicateRange always produce runs whose run_id is
-// freshly minted and distinct from every source run_id, for single-run and
-// multi-run payloads, while carrying the source text/base_ordinal through
-// unchanged.
+// makeRunSeq builds n runs with distinct minted run_ids and marker text.
+func makeRunSeq(t *testing.T, n int) []content.Run {
+	t.Helper()
+	runs := make([]content.Run, n)
+	for i := range runs {
+		id, err := MintID()
+		if err != nil {
+			t.Fatalf("MintID: %v", err)
+		}
+		runs[i] = content.Run{RunID: id, BaseOrdinal: uint32(i * 10), Text: string(rune('A' + i)), LangRef: content.LangRef(1)}
+	}
+	return runs
+}
+
+// TestFR_022_PasteMintsFreshIdentity is T-0072's named test. PasteContent and
+// DuplicateRange always produce runs whose run_id is freshly minted and
+// distinct from every source run_id, for single-run and multi-run payloads,
+// while carrying the source text/base_ordinal through unchanged.
 func TestFR_022_PasteMintsFreshIdentity(t *testing.T) {
 	cases := []struct {
 		name string
@@ -26,7 +40,7 @@ func TestFR_022_PasteMintsFreshIdentity(t *testing.T) {
 
 			for _, op := range []struct {
 				label string
-				fn    func([]Run) ([]Run, error)
+				fn    func([]content.Run) ([]content.Run, error)
 			}{
 				{"DuplicateRange", DuplicateRange},
 				{"PasteContent", PasteContent},
@@ -40,16 +54,13 @@ func TestFR_022_PasteMintsFreshIdentity(t *testing.T) {
 				}
 				produced := make(map[pdlfmt.UnitID]struct{}, c.n)
 				for i, r := range out {
-					// Fresh id: not equal to ANY source id.
 					if _, isSource := srcIDs[r.RunID]; isSource {
 						t.Fatalf("%s: produced run %d reused a source run_id", op.label, i)
 					}
-					// Distinct among produced runs too.
 					if _, dup := produced[r.RunID]; dup {
 						t.Fatalf("%s: produced run %d duplicates another produced run_id", op.label, i)
 					}
 					produced[r.RunID] = struct{}{}
-					// Content rides through unchanged.
 					if r.Text != source[i].Text || r.BaseOrdinal != source[i].BaseOrdinal {
 						t.Fatalf("%s: produced run %d changed content/base_ordinal", op.label, i)
 					}

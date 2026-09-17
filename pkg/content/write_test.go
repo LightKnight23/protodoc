@@ -10,7 +10,7 @@ import (
 // named rejection error (never a normalised/mutated value); over already-NFC
 // strings it returns the run byte-identical.
 func TestCON_003_WriterRejectsNonNFCRatherThanConverting(t *testing.T) {
-	rid, err := MintID()
+	rid, err := testMintID()
 	if err != nil {
 		t.Fatalf("MintID: %v", err)
 	}

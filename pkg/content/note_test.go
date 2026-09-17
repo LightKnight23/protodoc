@@ -13,9 +13,9 @@ import (
 // resolving to a present TextBlock is rejected; a note_placement value
 // outside {0x00, 0x01} is rejected.
 func TestFR_036_NoteBodyBlockResolvesToTextBlock(t *testing.T) {
-	noteID, _ := MintID()
-	bodyBlock, _ := MintID()
-	anchorRun, _ := MintID()
+	noteID, _ := testMintID()
+	bodyBlock, _ := testMintID()
+	anchorRun, _ := testMintID()
 
 	for _, placement := range []NotePlacement{PlacementFootnote, PlacementEndnote} {
 		n := Note{

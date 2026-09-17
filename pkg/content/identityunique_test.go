@@ -1,8 +1,10 @@
-package content
+package content_test
 
 import (
 	"testing"
 
+	"Protodoc/pkg/content"
+	"Protodoc/pkg/content/mint"
 	"Protodoc/pkg/pdlfmt"
 )
 
@@ -10,46 +12,36 @@ import (
 // conformance test (case id CONF-IDENTITY-UNIQUE-COPY-FORK-BRANCH). It
 // builds a 3-document fixture set -- an original, a copy of it, and a fork
 // with its own added content -- and decodes them together, asserting zero
-// colliding run_id/unit_id values across all three, so identity is unique
-// across the document and every copy/fork/branch derived from it for the
-// lifetime of the lineage (FR-019), not merely within one file.
+// colliding run_id values across all three, so identity is unique across the
+// document and every copy/fork/branch derived from it (FR-019), not merely
+// within one file.
 func TestFR_019_IdentifierUniqueAcrossCopyForkBranch(t *testing.T) {
-	// Original document: a handful of runs with freshly minted ids.
-	original := make([]Run, 5)
+	original := make([]content.Run, 5)
 	for i := range original {
-		id, err := MintID()
+		id, err := mint.MintID()
 		if err != nil {
 			t.Fatalf("MintID: %v", err)
 		}
-		original[i] = Run{RunID: id, BaseOrdinal: uint32(i * 10), Text: "run", LangRef: LangRef(1)}
+		original[i] = content.Run{RunID: id, BaseOrdinal: uint32(i * 10), Text: "run", LangRef: content.LangRef(1)}
 	}
 
 	// Copy: duplicating content mints fresh ids (FR-022), so the copy shares
-	// no run_id with the original -- the copy is a distinct lineage member.
-	copyDoc, err := DuplicateRange(original)
+	// no run_id with the original.
+	copyDoc, err := mint.DuplicateRange(original)
 	if err != nil {
 		t.Fatalf("DuplicateRange (copy): %v", err)
 	}
 
-	// Fork: start from the original, then add independently-minted content,
-	// modelling a branch that diverges. The fork keeps the original's ids
-	// for unchanged content but adds new units with fresh ids.
-	fork := append([]Run(nil), original...)
+	// Fork: original plus independently-minted added content.
+	fork := append([]content.Run(nil), original...)
 	for i := 0; i < 3; i++ {
-		id, err := MintID()
+		id, err := mint.MintID()
 		if err != nil {
 			t.Fatalf("MintID (fork): %v", err)
 		}
-		fork = append(fork, Run{RunID: id, BaseOrdinal: uint32(100 + i*10), Text: "forked", LangRef: LangRef(1)})
+		fork = append(fork, content.Run{RunID: id, BaseOrdinal: uint32(100 + i*10), Text: "forked", LangRef: content.LangRef(1)})
 	}
 
-	// Decode all three "files" together: collect every run_id and assert no
-	// collision EXCEPT the legitimately-shared original ids the fork retains
-	// (those are the SAME lineage unit, not a collision). The test of FR-019
-	// is that no TWO DISTINCT units share an id: the copy shares none with
-	// anything, and the fork's added units share none.
-
-	// 1) The copy must collide with nothing.
 	originalSet := runIDSet(original)
 	forkSet := runIDSet(fork)
 	for _, r := range copyDoc {
@@ -61,8 +53,6 @@ func TestFR_019_IdentifierUniqueAcrossCopyForkBranch(t *testing.T) {
 		}
 	}
 
-	// 2) The fork's ADDED units (those not in the original) must collide
-	// with nothing in the original or the copy.
 	copySet := runIDSet(copyDoc)
 	for _, r := range fork {
 		if _, shared := originalSet[r.RunID]; shared {
@@ -73,15 +63,14 @@ func TestFR_019_IdentifierUniqueAcrossCopyForkBranch(t *testing.T) {
 		}
 	}
 
-	// 3) Within each document, every run_id is itself unique.
-	for name, doc := range map[string][]Run{"original": original, "copy": copyDoc, "fork": fork} {
+	for name, doc := range map[string][]content.Run{"original": original, "copy": copyDoc, "fork": fork} {
 		if !allRunIDsDistinct(doc) {
 			t.Fatalf("%s document contains an internal run_id collision", name)
 		}
 	}
 }
 
-func runIDSet(runs []Run) map[pdlfmt.UnitID]struct{} {
+func runIDSet(runs []content.Run) map[pdlfmt.UnitID]struct{} {
 	s := make(map[pdlfmt.UnitID]struct{}, len(runs))
 	for _, r := range runs {
 		s[r.RunID] = struct{}{}
@@ -89,7 +78,7 @@ func runIDSet(runs []Run) map[pdlfmt.UnitID]struct{} {
 	return s
 }
 
-func allRunIDsDistinct(runs []Run) bool {
+func allRunIDsDistinct(runs []content.Run) bool {
 	seen := make(map[pdlfmt.UnitID]struct{}, len(runs))
 	for _, r := range runs {
 		if _, dup := seen[r.RunID]; dup {

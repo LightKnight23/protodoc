@@ -11,11 +11,11 @@ import (
 // present in the document model, flagged orphaned, never silently dropped;
 // an annotation with a surviving anchor endpoint stays live.
 func TestFR_028_FullDeletionOrphansRatherThanDrops(t *testing.T) {
-	runA, _ := MintID()
-	runB, _ := MintID()
-	runC, _ := MintID()
-	annID1, _ := MintID()
-	annID2, _ := MintID()
+	runA, _ := testMintID()
+	runB, _ := testMintID()
+	runC, _ := testMintID()
+	annID1, _ := testMintID()
+	annID2, _ := testMintID()
 
 	// ann1 anchors entirely within runA (both endpoints on runA).
 	ann1 := Annotation{

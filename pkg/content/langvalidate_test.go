@@ -11,7 +11,7 @@ import (
 // the offending unit id; a resolvable reference is accepted; an unset
 // reference is rejected before resolution (FR-031).
 func TestFR_031_PDLANG001RejectsUnresolvableTag(t *testing.T) {
-	spanID, _ := MintID()
+	spanID, _ := testMintID()
 
 	reg := MapLanguageRegistry{
 		LangRef(1): "en-US",

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"Protodoc/pkg/content"
+	"Protodoc/pkg/content/mint"
 	"Protodoc/pkg/ledger"
 	"Protodoc/pkg/pdlfmt"
 )
@@ -21,14 +22,14 @@ func TestM04_OrphanCarriageSurvivesLedgerReload(t *testing.T) {
 	// deleted, capturing all four fields via the M04 orphaning path.
 	order := make(content.DocumentOrder, 5)
 	for i := range order {
-		id, err := content.MintID()
+		id, err := mint.MintID()
 		if err != nil {
 			t.Fatalf("MintID: %v", err)
 		}
 		order[i] = id
 	}
-	annID, _ := content.MintID()
-	bodyBlock, _ := content.MintID()
+	annID, _ := mint.MintID()
+	bodyBlock, _ := mint.MintID()
 
 	ann := content.Annotation{
 		ID:        annID,

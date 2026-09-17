@@ -10,8 +10,8 @@ import (
 // construction, and a decoded span lacking the field is rejected before any
 // resolution logic (FR-031: the field is mandatory, not optional).
 func TestFR_031_TextSpanRequiresLanguageTagField(t *testing.T) {
-	rid, _ := MintID()
-	bid, _ := MintID()
+	rid, _ := testMintID()
+	bid, _ := testMintID()
 
 	// NewRun rejects an unset language reference.
 	if _, err := NewRun(rid, 0, "hello", LangUnset); !errors.Is(err, ErrMissingLanguageRef) {
