@@ -40,6 +40,53 @@ type Annotation struct {
 	Orphan OrphanRecord
 }
 
+// DocumentOrder is the document's run identities in traversal/storage order,
+// the deterministic sequence orphan resolution walks to find the surviving
+// units nearest a deleted span. It is derived from the authoritative content
+// (the run order), so it is identical for a fixed document state.
+type DocumentOrder []pdlfmt.UnitID
+
+// ResolveOrphan returns the nearest surviving unit before and after the
+// orphaned annotation a, given the document's run order and the set of
+// deleted run identities. Resolution is deterministic for a fixed document
+// state: it walks order once and returns the same (prev, next) pair on every
+// call. prev is the nearest surviving unit strictly before the annotation's
+// start anchor position in order; next is the nearest surviving unit
+// strictly after the end anchor position. Either is the zero unit-id when the
+// orphaned span sat at the document start (no surviving predecessor) or end
+// (no surviving successor). ResolveOrphan does not mutate a.
+//
+// Positions are located by the annotation's own anchor run identities within
+// order (content identity, not a counted position).
+func ResolveOrphan(a Annotation, order DocumentOrder, deleted map[pdlfmt.UnitID]struct{}) (prev, next pdlfmt.UnitID) {
+	startIdx, endIdx := -1, -1
+	for i, id := range order {
+		if id.Equal(a.Start.RunID) {
+			startIdx = i
+		}
+		if id.Equal(a.End.RunID) {
+			endIdx = i
+		}
+	}
+	if startIdx >= 0 {
+		for i := startIdx - 1; i >= 0; i-- {
+			if _, gone := deleted[order[i]]; !gone {
+				prev = order[i]
+				break
+			}
+		}
+	}
+	if endIdx >= 0 {
+		for i := endIdx + 1; i < len(order); i++ {
+			if _, gone := deleted[order[i]]; !gone {
+				next = order[i]
+				break
+			}
+		}
+	}
+	return prev, next
+}
+
 // DeleteRange records the deletion of the set of run identities in
 // deletedRunIDs from a document containing the given annotations, and
 // returns the updated annotations. An annotation whose anchored span is
