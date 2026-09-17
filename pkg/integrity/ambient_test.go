@@ -47,14 +47,24 @@ func TestNFR_005_NoAmbientValuesOutsideAllowlistedSites(t *testing.T) {
 	}
 
 	// (2) Source-order audit over the integrity package's non-test sources.
+	// The forbidden IMPORTS are ambient-value sources with no legitimate
+	// deterministic use here: user/machine identity, filesystem metadata, and
+	// process randomness. The "time" package is NOT import-banned, because a
+	// value conversion of a STORED instant (time.Unix(storedSeconds, 0)) is
+	// not a wall-clock read; instead the wall-clock READS themselves
+	// (time.Now / time.Since / time.Until) are banned at the call level below,
+	// which is the precise NFR-005 concern ("values derived from wall-clock
+	// time").
 	forbidden := map[string]string{
-		"time":         "wall-clock time",
 		"os/user":      "user identity",
 		"os":           "filesystem metadata / environment",
 		"crypto/rand":  "process randomness",
 		"math/rand":    "process randomness",
 		"math/rand/v2": "process randomness",
 	}
+	// wallClockReads are the ambient time READS (a value derived from the
+	// wall clock), banned even though the time package's value types are fine.
+	wallClockReads := []string{"time.Now", "time.Since", "time.Until"}
 	fset := token.NewFileSet()
 	entries, err := os.ReadDir(".")
 	if err != nil {
@@ -67,7 +77,11 @@ func TestNFR_005_NoAmbientValuesOutsideAllowlistedSites(t *testing.T) {
 			continue
 		}
 		scanned++
-		af, err := parser.ParseFile(fset, name, nil, parser.ImportsOnly)
+		src, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		af, err := parser.ParseFile(fset, name, src, parser.ImportsOnly)
 		if err != nil {
 			t.Fatalf("parse %s: %v", name, err)
 		}
@@ -75,6 +89,13 @@ func TestNFR_005_NoAmbientValuesOutsideAllowlistedSites(t *testing.T) {
 			path, _ := strconv.Unquote(imp.Path.Value)
 			if reason, bad := forbidden[path]; bad {
 				t.Errorf("%s imports %q (%s); the signature/coverage layer must introduce no ambient value outside the four allowlisted sites (NFR-005)", name, path, reason)
+			}
+		}
+		// Ban wall-clock reads at the call level (a value derived from the
+		// wall clock), independent of the time package's value-type use.
+		for _, read := range wallClockReads {
+			if strings.Contains(string(src), read+"(") {
+				t.Errorf("%s calls %s (a wall-clock read); NFR-005 excludes values derived from wall-clock time from the octet stream", name, read)
 			}
 		}
 	}
