@@ -242,6 +242,15 @@ func decodeRanges(src []byte) ([]SegmentRange, int, error) {
 	if count == 0 {
 		return nil, pos, nil
 	}
+	// FR-106 / CP-012: a declared element count is checked against the octets
+	// actually remaining BEFORE any allocation of that size. Each range is at
+	// least two octets (two minimal 1-octet varints), so a count exceeding
+	// len(remaining)/2 cannot possibly be satisfied and is rejected rather
+	// than used to size an allocation from untrusted input.
+	remaining := len(src) - pos
+	if count > uint64(remaining/2) {
+		return nil, 0, fmt.Errorf("%w: coverage range count %d exceeds the %d octets remaining", ErrCoverTruncated, count, remaining)
+	}
 	ranges := make([]SegmentRange, 0, count)
 	for i := uint64(0); i < count; i++ {
 		if pos >= len(src) {
