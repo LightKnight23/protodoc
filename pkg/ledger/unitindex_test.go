@@ -8,12 +8,17 @@ import (
 	"Protodoc/pkg/pdlfmt"
 )
 
-// unitFixture builds a deterministic AddressableUnit from a seed. The first
-// octet is set so units spread across several index-route buckets.
+// unitFixture builds a deterministic AddressableUnit from a seed. The
+// identity embeds the seed in its trailing octets so distinct seeds always
+// yield distinct identities (even for large seed ranges), while the first
+// octet is varied so units spread across several index-route buckets.
 func unitFixture(seed int) AddressableUnit {
 	var id pdlfmt.UnitID
-	for i := range id {
-		id[i] = byte(seed*7 + i*13 + 1)
+	id[0] = byte(seed * 17) // spreads high nibble across buckets
+	id[1] = byte(seed * 31)
+	// Embed the seed uniquely in the last 8 octets.
+	for i := 0; i < 8; i++ {
+		id[8+i] = byte(uint64(seed) >> (uint(i) * 8))
 	}
 	var dig pdlfmt.Digest256
 	for i := range dig {
