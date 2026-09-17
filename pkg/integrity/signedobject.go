@@ -17,6 +17,9 @@ package integrity
 import (
 	"crypto/sha256"
 	"errors"
+	"fmt"
+
+	"Protodoc/pkg/pdlfmt"
 )
 
 // SignedObjectPreimageLen is the fixed preimage length: 1 domain octet + four
@@ -47,6 +50,48 @@ func AssembleSignedObjectPreimage(in SignedObjectInput) []byte {
 	buf = append(buf, in.PresentationArtefactDigest[:]...)
 	buf = append(buf, in.CoverageDescriptorDigest[:]...)
 	return buf
+}
+
+// SlotDigestResolver returns the SegmentTableSlot.slot-digest of the segment
+// addressed by a unit-id (e.g. a SIGNATURE's sig-presentation-ref -> a
+// PRESENTATION_ARTEFACT segment), and ok=false if no such segment exists. The
+// caller supplies this from the current file; this package never trusts an
+// inline copy of a digest that is defined to be content-addressed.
+type SlotDigestResolver func(ref UnitID) (slotDigest Digest, ok bool)
+
+// UnitID is the 16-octet unit identifier (aliased from pdlfmt so callers of
+// this package need not import pdlfmt just to name the resolver's key).
+type UnitID = pdlfmt.UnitID
+
+// ErrPresentationRefUnresolved is returned when a signature's
+// sig-presentation-ref does not resolve to a present PRESENTATION_ARTEFACT
+// segment.
+var ErrPresentationRefUnresolved = errors.New("integrity: sig-presentation-ref does not resolve to a present PRESENTATION_ARTEFACT segment")
+
+// SignedObjectForSignature assembles the signed_object for a SIGNATURE record,
+// sourcing presentation_artefact_digest STRICTLY from the referenced
+// PRESENTATION_ARTEFACT segment's own SegmentTableSlot.slot-digest (via
+// resolve), never from any inline copy in the signature (integrity.abnf S3.2,
+// document.abnf S7.4: the digest is content-addressed and never separately
+// stored). tcRoot, structureDigest, and coverageDescriptorDigest are the other
+// three fresh inputs; the coverage digest is taken from the signature's own
+// carried descriptor. A signature with a zero16 presentation ref, or a ref
+// that does not resolve, yields ErrPresentationRefUnresolved.
+func SignedObjectForSignature(sig SignatureRecord, tcRoot, structureDigest Digest, resolve SlotDigestResolver) (Digest, error) {
+	presDigest, ok := resolve(sig.PresentationRef)
+	if !ok {
+		return Digest{}, fmt.Errorf("%w: %x", ErrPresentationRefUnresolved, sig.PresentationRef)
+	}
+	covDigest, err := sig.Coverage.Digest()
+	if err != nil {
+		return Digest{}, fmt.Errorf("integrity: coverage digest: %w", err)
+	}
+	return SignedObject(SignedObjectInput{
+		TCRoot:                     tcRoot,
+		StructureDigest:            structureDigest,
+		PresentationArtefactDigest: presDigest,
+		CoverageDescriptorDigest:   covDigest,
+	})
 }
 
 // SignedObject assembles the preimage and hashes it once with SHA-256 to
