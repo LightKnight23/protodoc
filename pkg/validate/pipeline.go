@@ -46,6 +46,9 @@ type Finding struct {
 	// budget finding (CP-007) reported ALONGSIDE any validity verdict, never
 	// instead of one.
 	Budget bool
+	// Diag carries the offset/unit/rule diagnostic for a structural failure
+	// (FR-102); nil for findings that do not localise to an octet offset.
+	Diag *Diagnostic
 }
 
 // Step is one pipeline check. It returns a non-nil *Finding on failure (or a
