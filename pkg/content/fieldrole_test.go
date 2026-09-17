@@ -110,6 +110,14 @@ var fieldRoleRegistry = map[string]fieldRole{
 	"CrossReference.Target": roleIdentityComponent,
 	"CrossReference.Kind":   roleEnum,
 	"CrossReference.Anchor": roleIdentityComponent,
+
+	// ScalarAdmissibilityError (CON-004 / PD-SCALAR-001): a physical byte
+	// offset into a string, the offending code point (literal scalar), and a
+	// closed reason enum -- none is a persisted document-wide counted text
+	// position.
+	"ScalarAdmissibilityError.ByteOffset": rolePhysicalOffsetLen,
+	"ScalarAdmissibilityError.CodePoint":  roleScalarValue,
+	"ScalarAdmissibilityError.Reason":     roleEnum,
 }
 
 // TestCON_001_AFieldRoleAuditHasNoPersistedCountedPosition is T-0083's named

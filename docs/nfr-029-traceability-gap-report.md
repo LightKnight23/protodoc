@@ -82,9 +82,9 @@ choose between.
 
 ## Full gap list
 
-### Requirement ids with zero conformance cases (57)
+### Requirement ids with zero conformance cases (56)
 
-CON-004, CON-006, CON-016, CON-017, CON-018, CON-020, CON-021, CON-023, CON-024,
+CON-006, CON-016, CON-017, CON-018, CON-020, CON-021, CON-023, CON-024,
 CON-025, FR-005, FR-012, FR-013, FR-014, FR-015, FR-016,
 FR-032, FR-033, FR-034, FR-037, FR-038,
 FR-039, FR-040, FR-050, FR-059, FR-060,
@@ -93,12 +93,12 @@ FR-100, FR-101, FR-111, FR-112, FR-113, FR-114, FR-115, FR-118, FR-124, NFR-002,
 NFR-010, NFR-019, NFR-021, NFR-022, NFR-023, NFR-024, NFR-025, NFR-031,
 TR-001, TR-002, TR-003
 
-### Rule ids with zero conformance cases (22)
+### Rule ids with zero conformance cases (21)
 
 PD-2D-001, PD-A11Y-001, PD-A11Y-002, PD-A11Y-003, PD-A11Y-004, PD-BIDI-001,
 PD-DISC-001, PD-DUP-001, PD-EXT-001, PD-EXT-002, PD-EXT-003,
 PD-FONT-001, PD-INDEX-001, PD-INFER-001, PD-MODE-001, PD-NFC-001, PD-NFC-002,
-PD-NORM-001, PD-PREV-001, PD-SCALAR-001, PD-SEGTYPE-001, PD-TBL-001
+PD-NORM-001, PD-PREV-001, PD-SEGTYPE-001, PD-TBL-001
 
 ## Release-gate mechanism
 
