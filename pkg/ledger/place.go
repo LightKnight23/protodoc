@@ -3,19 +3,21 @@
 // (contracts/container.abnf S1 `ledger = *segment`, S8 "LEDGER PLACEMENT
 // FUNCTION", data-model.md layer "Storage (ledger)").
 //
-// This file implements only the foundational placement primitive place()
-// (T-0033, FR-056): given a prior file image and an edit delta describing
-// new segment payloads, it appends new sealed segments to the ledger
-// region and never rewrites an octet belonging to a segment already
-// present in the prior image. The properties layered on top of this
-// primitive by later M02 tasks -- monotonic storage-ordinal assignment
-// (T-0034), no-op byte-identical round trip (T-0035), the per-edit
+// This file implements the foundational placement primitive place()
+// (T-0033, FR-056) plus the monotonic storage-ordinal assignment layered
+// onto it (T-0034, FR-058): given a prior file image and an edit delta
+// describing new segment payloads, it appends new sealed segments to the
+// ledger region, never rewrites an octet belonging to a segment already
+// present in the prior image, and assigns each appended segment a
+// strictly-increasing storage ordinal derived purely from allocation
+// sequence. The remaining properties layered on this primitive by later
+// M02 tasks -- no-op byte-identical round trip (T-0035), the per-edit
 // write-cost budget (T-0036), content-defined chunking (T-0037), and the
 // fixed-prefix slot patching that a real commit performs -- are
 // deliberately NOT implemented here; each is its own task with its own
-// named test and its own requirement id, so this task does not claim
-// coverage of theirs. place() here is the append-only storage core
-// those tasks build on, nothing more.
+// named test and its own requirement id, so this file does not claim
+// coverage of theirs. place() here is the append-only, ordinal-assigning
+// storage core those tasks build on, nothing more.
 package ledger
 
 import (
@@ -64,6 +66,42 @@ type EditDelta struct {
 	NewSegments []SegmentPayload
 }
 
+// Placement records where one appended segment landed and the storage
+// ordinal it was issued. Ordinal is the segment's canonical
+// storage-order position and equals the SegmentTableSlot index it will
+// occupy (data-model.md S2.5 "Identity: storage ordinal, equal to its
+// SegmentTableSlot index", CQ-007 option B). Per FR-058 the ordinal is a
+// pure function of allocation sequence: it derives from no unit's name,
+// digest or content bytes, so permuting the payloads' contents while
+// holding their append order fixed leaves every Ordinal unchanged.
+type Placement struct {
+	// Ordinal is the monotonically issued storage ordinal, equal to the
+	// segment's SegmentTableSlot index (0-based). Within one document it
+	// is strictly increasing in allocation order and never reused.
+	Ordinal uint64
+
+	// Offset is the absolute file offset of the segment's first octet in
+	// the returned image; always >= PrefixLength (container.abnf S5
+	// slot-offset invariant).
+	Offset uint64
+
+	// Length is the segment's octet length, copied from its payload.
+	Length uint64
+}
+
+// PlaceResult is one place() call's outcome: the new file image and, in
+// append order, the Placement issued for each appended segment.
+type PlaceResult struct {
+	// Image is the new file image: prior's octets in [0, len(prior))
+	// unchanged, the appended segments in the tail.
+	Image []byte
+
+	// Placements holds one entry per delta.NewSegments entry, in the same
+	// order, each carrying the ordinal, offset and length that segment was
+	// placed at.
+	Placements []Placement
+}
+
 var (
 	// ErrPriorTooShort is returned when the prior image is shorter than
 	// the fixed prefix: a well-formed Protodoc file is always at least
@@ -76,16 +114,37 @@ var (
 	// (container.abnf S6.1), so an empty payload is a caller error, caught
 	// before any octet is appended.
 	ErrEmptySegmentPayload = errors.New("ledger: segment payload is empty")
+
+	// ErrTooManySegments is returned when placing the delta's new segments
+	// would issue a storage ordinal at or beyond MAX_SEGMENTS (16384): the
+	// SegmentTable holds exactly that many slots (container.abnf S5), so
+	// ordinal 16384 has no slot to occupy. Checked before any octet is
+	// appended (CP-006).
+	ErrTooManySegments = errors.New("ledger: placement would exceed MAX_SEGMENTS (16384) storage ordinals")
 )
 
 // place appends the delta's new sealed segments to the end of the prior
-// file image and returns the resulting new image. It is the append-only
-// storage primitive of FR-056: the returned image's byte range
-// [0, len(prior)) is byte-identical to prior at every offset -- place
-// never rewrites, relocates or reorders any octet already present in
+// file image and returns the resulting new image together with the
+// storage ordinal, offset and length issued to each appended segment.
+//
+// It is the append-only storage primitive of FR-056: the returned image's
+// byte range [0, len(prior)) is byte-identical to prior at every offset --
+// place never rewrites, relocates or reorders any octet already present in
 // prior. New segments occupy the range [len(prior), len(new)) exclusively,
 // contiguous and in slice order, so the only octets that differ between
 // prior and the result are ones place itself newly allocated.
+//
+// It also assigns storage ordinals per FR-058 / CQ-007 option B:
+// priorSegmentCount is the count of storage ordinals already issued in
+// prior (the SegmentTable high-water mark, container.abnf S3
+// segment-count). The k-th appended segment (0-based within the delta)
+// receives ordinal priorSegmentCount+k. Every issued ordinal is therefore
+// a strictly-increasing pure function of allocation sequence and depends
+// on no segment's name, digest or content bytes: two byte-identical
+// payloads appended at different positions receive different ordinals, and
+// permuting the payloads' contents while holding their append order fixed
+// leaves the ordinal sequence unchanged. The count of already-issued
+// ordinals plus this delta's new ones must not exceed MAX_SEGMENTS.
 //
 // place does not mutate the caller's prior slice: it returns a freshly
 // allocated image and copies prior into its head, so a differential test
@@ -94,15 +153,26 @@ var (
 // treated as immutable, exactly as an already-sealed on-disk file is.
 //
 // place performs no fixed-prefix patching (no ring-slot succession, no
-// SegmentTableSlot writes, no index-route update). Those are a real
-// commit's responsibility and land in their own M02 tasks; conflating
-// them here would make this primitive impossible to test in isolation for
-// the one property FR-056 pins on it. Consequently the returned image is a
-// valid demonstration of the append-only extent guarantee, not yet a
-// committed, re-openable document state.
-func place(prior []byte, delta EditDelta) ([]byte, error) {
+// SegmentTableSlot writes, no index-route update): it computes the ordinal
+// each segment WILL occupy but does not itself write the SegmentTable.
+// Persisting these placements into slots is a real commit's
+// responsibility and lands in its own M02 task; conflating it here would
+// make this primitive impossible to test in isolation. Consequently the
+// returned image is a valid demonstration of the append-only,
+// ordinal-assigning guarantees, not yet a committed, re-openable state.
+func place(prior []byte, priorSegmentCount uint64, delta EditDelta) (PlaceResult, error) {
 	if len(prior) < PrefixLength {
-		return nil, fmt.Errorf("%w: got %d octets", ErrPriorTooShort, len(prior))
+		return PlaceResult{}, fmt.Errorf("%w: got %d octets", ErrPriorTooShort, len(prior))
+	}
+
+	// The highest ordinal this call would issue is
+	// priorSegmentCount + len(NewSegments) - 1; it must be < MAX_SEGMENTS.
+	// Equivalently priorSegmentCount + len(NewSegments) <= MAX_SEGMENTS.
+	// Checked before any allocation (CP-006), with the addition guarded
+	// against overflow by comparing against the ceiling first.
+	newCount := uint64(len(delta.NewSegments))
+	if priorSegmentCount > container.MaxSegments || newCount > container.MaxSegments-priorSegmentCount {
+		return PlaceResult{}, fmt.Errorf("%w: %d already issued + %d new", ErrTooManySegments, priorSegmentCount, newCount)
 	}
 
 	// Compute the total appended length up front with overflow-safe
@@ -114,12 +184,12 @@ func place(prior []byte, delta EditDelta) ([]byte, error) {
 	for i := range delta.NewSegments {
 		n := len(delta.NewSegments[i].Octets)
 		if n == 0 {
-			return nil, fmt.Errorf("%w: NewSegments[%d]", ErrEmptySegmentPayload, i)
+			return PlaceResult{}, fmt.Errorf("%w: NewSegments[%d]", ErrEmptySegmentPayload, i)
 		}
 		// Guard against int overflow when summing extents on a 32-bit
 		// build: appendLen + n must not wrap negative.
 		if appendLen > (int(^uint(0)>>1))-n {
-			return nil, fmt.Errorf("ledger: appended segment length overflows addressable size at NewSegments[%d]", i)
+			return PlaceResult{}, fmt.Errorf("ledger: appended segment length overflows addressable size at NewSegments[%d]", i)
 		}
 		appendLen += n
 	}
@@ -131,12 +201,20 @@ func place(prior []byte, delta EditDelta) ([]byte, error) {
 	out := make([]byte, len(prior)+appendLen)
 	copy(out[:len(prior)], prior)
 
+	placements := make([]Placement, 0, len(delta.NewSegments))
 	pos := len(prior)
 	for i := range delta.NewSegments {
 		seg := delta.NewSegments[i].Octets
 		copy(out[pos:pos+len(seg)], seg)
+		placements = append(placements, Placement{
+			// Ordinal derives ONLY from allocation position, never from
+			// seg's content: this is the FR-058 invariant.
+			Ordinal: priorSegmentCount + uint64(i),
+			Offset:  uint64(pos),
+			Length:  uint64(len(seg)),
+		})
 		pos += len(seg)
 	}
 
-	return out, nil
+	return PlaceResult{Image: out, Placements: placements}, nil
 }

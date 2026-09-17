@@ -60,14 +60,18 @@ func TestFR_056_PlaceNeverMutatesExistingOctets(t *testing.T) {
 		priorSnapshot := append([]byte(nil), prior...)
 
 		delta := EditDelta{NewSegments: []SegmentPayload{
-			makeSegment(k, 64+k),          // varying-length segment
-			makeSegment(k*100, 96),        // a second segment same edit
+			makeSegment(k, 64+k),   // varying-length segment
+			makeSegment(k*100, 96), // a second segment same edit
 		}}
 
-		next, err := place(prior, delta)
+		// Each prior edit appended exactly 2 segments, so the count of
+		// ordinals already issued before this edit is (k-1)*2.
+		priorSegmentCount := uint64((k - 1) * 2)
+		res, err := place(prior, priorSegmentCount, delta)
 		if err != nil {
 			t.Fatalf("edit %d: place returned error: %v", k, err)
 		}
+		next := res.Image
 
 		// The new image must be strictly longer (two non-empty segments
 		// were appended) and its head must equal prior exactly.
@@ -124,10 +128,11 @@ func TestFR_056_PlaceAppendsContiguouslyAtTail(t *testing.T) {
 	s1 := makeSegment(1, 80)
 	s2 := makeSegment(2, 200)
 
-	out, err := place(prior, EditDelta{NewSegments: []SegmentPayload{s1, s2}})
+	res, err := place(prior, 0, EditDelta{NewSegments: []SegmentPayload{s1, s2}})
 	if err != nil {
 		t.Fatalf("place: %v", err)
 	}
+	out := res.Image
 
 	wantLen := len(prior) + len(s1.Octets) + len(s2.Octets)
 	if len(out) != wantLen {
@@ -159,11 +164,11 @@ func TestFR_056_PlaceEmptyDeltaIsZeroMutation(t *testing.T) {
 	prior := makePriorImage()
 	priorSnapshot := append([]byte(nil), prior...)
 
-	out, err := place(prior, EditDelta{})
+	res, err := place(prior, 0, EditDelta{})
 	if err != nil {
 		t.Fatalf("place with empty delta: %v", err)
 	}
-	if !bytes.Equal(out, priorSnapshot) {
+	if !bytes.Equal(res.Image, priorSnapshot) {
 		t.Fatalf("empty-delta place did not return a byte-identical image")
 	}
 }
@@ -174,13 +179,13 @@ func TestFR_056_PlaceEmptyDeltaIsZeroMutation(t *testing.T) {
 // and no image is produced.
 func TestFR_056_PlaceRejectsShortPriorAndEmptyPayload(t *testing.T) {
 	short := make([]byte, PrefixLength-1)
-	if _, err := place(short, EditDelta{}); !errors.Is(err, ErrPriorTooShort) {
+	if _, err := place(short, 0, EditDelta{}); !errors.Is(err, ErrPriorTooShort) {
 		t.Fatalf("short prior: got err %v, want ErrPriorTooShort", err)
 	}
 
 	prior := makePriorImage()
 	delta := EditDelta{NewSegments: []SegmentPayload{{Octets: nil}}}
-	if _, err := place(prior, delta); !errors.Is(err, ErrEmptySegmentPayload) {
+	if _, err := place(prior, 0, delta); !errors.Is(err, ErrEmptySegmentPayload) {
 		t.Fatalf("empty payload: got err %v, want ErrEmptySegmentPayload", err)
 	}
 }
