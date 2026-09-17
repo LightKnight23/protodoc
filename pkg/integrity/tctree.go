@@ -31,3 +31,19 @@ func TCLeafRedactable(salt [SaltSize]byte, frame []byte) Digest {
 	copy(d[:], h.Sum(nil))
 	return d
 }
+
+// TCLeafNonredactable returns the non-redactable-leaf digest
+// SHA-256(0x07 || frame) for a content-model record NOT designated
+// redactable at signing time (integrity.abnf S2.2 t-c-leaf-nonredactable).
+// It carries no salt, and frame is the stored frame bytes verbatim (same
+// rule as TCLeafRedactable). The 0x07 domain tag separates it from the
+// 0x02-tagged redactable leaf: no salt value can make a redactable leaf of
+// the same frame collide with this.
+func TCLeafNonredactable(frame []byte) Digest {
+	h := sha256.New()
+	h.Write([]byte{DomainTCLeafNonredactable})
+	h.Write(frame)
+	var d Digest
+	copy(d[:], h.Sum(nil))
+	return d
+}
