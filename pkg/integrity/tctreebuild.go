@@ -107,3 +107,17 @@ func buildTCTree(records []ContentRecord) (Digest, error) {
 	}
 	return level[0], nil
 }
+
+// TCRoot returns the T_C root -- the document state identity (DP-006/FR-003:
+// "every state gets an identifier differing whenever any value of that state
+// differs"), and the concrete realization of FR-001's "document state =
+// complete value set". Its input `records` IS the value set that determines
+// extraction, render, verdict and metadata (ATTEST-typed segments are
+// excluded upstream; see T-0138). It is recomputed fresh from the records'
+// stored frame bytes and depends on no SegmentTableSlot and no T_S value:
+// T_C_root is signed directly inside signed_object, never routed through
+// T_S (integrity.abnf S2.2, data-model.md S2.10). It errors only if the
+// record count exceeds the T_C capacity.
+func TCRoot(records []ContentRecord) (Digest, error) {
+	return buildTCTree(records)
+}
