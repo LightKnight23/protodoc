@@ -25,8 +25,9 @@ import (
 type CorpusProfile struct {
 	Seed          int64
 	Pages         int // number of CONTENT text segments ("pages")
-	AvgSegBytes   int // average CONTENT segment size; sizes vary deterministically around it
+	AvgSegBytes   int // average CONTENT (text) segment size; varies deterministically
 	ResourceEvery int // insert a RESOURCE segment every N content segments (0 = none)
+	ResourceBytes int // average RESOURCE segment size (0 = small default ~256-512B)
 }
 
 // SmallCorpusProfile is a fast profile for the determinism unit test.
@@ -35,10 +36,12 @@ func SmallCorpusProfile(seed int64) CorpusProfile {
 }
 
 // GiBCorpusProfile is the NFR-012/013/014 benchmark profile: ~1 GiB across
-// 10,000 pages. It is documented here; the benchmarks that consume it live
-// in T-0098..T-0100.
+// 10,000 pages, where -- as in a real document -- RESOURCE (image) segments
+// dominate the octets and text is a small fraction (~7%), so that extraction
+// (which reads only CONTENT) reads far less than the whole file. Text: 10000
+// pages x ~8 KiB ~= 80 MiB; resources: 500 segments x ~1.84 MiB ~= 920 MiB.
 func GiBCorpusProfile(seed int64) CorpusProfile {
-	return CorpusProfile{Seed: seed, Pages: 10000, AvgSegBytes: 100 * 1024, ResourceEvery: 20}
+	return CorpusProfile{Seed: seed, Pages: 10000, AvgSegBytes: 8 * 1024, ResourceEvery: 20, ResourceBytes: 1932735}
 }
 
 // GenerateCorpus produces a valid PDL document image for the profile,
@@ -72,7 +75,17 @@ func GenerateCorpus(p CorpusProfile) ([]byte, error) {
 		plans = append(plans, segPlan{typ: container.SegmentTypeContent, length: length})
 		contentCount++
 		if p.ResourceEvery > 0 && contentCount%p.ResourceEvery == 0 {
-			plans = append(plans, segPlan{typ: container.SegmentTypeResource, length: uint64(256 + int(rng.next()%256))})
+			rlen := uint64(256 + int(rng.next()%256))
+			if p.ResourceBytes > 0 {
+				// Vary deterministically in [0.75x, 1.25x] of the average.
+				delta := int(rng.next()%uint64(p.ResourceBytes/2)) - p.ResourceBytes/4
+				rl := p.ResourceBytes + delta
+				if rl < 16 {
+					rl = 16
+				}
+				rlen = uint64(rl)
+			}
+			plans = append(plans, segPlan{typ: container.SegmentTypeResource, length: rlen})
 		}
 	}
 
