@@ -1,0 +1,4 @@
+# combined fixture: every step fails at once; the pipeline must report ONLY
+# the earliest-ordered failure (step 1) and evaluate no later step (FR-103).
+fail: 1,2,3,4,5,6,7,8,9,10,11,12,13
+expect_step: 1

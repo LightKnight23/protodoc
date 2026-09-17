@@ -1,0 +1,3 @@
+# golden fixture: only step 1 fails, so the pipeline reports step 1 and halts.
+fail: 1
+expect_step: 1

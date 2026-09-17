@@ -1,0 +1,7 @@
+# golden fixture: step 9 (structural ceilings) is the documented budget
+# exception. It produces a non-validity PD-BUDGET status reported ALONGSIDE
+# the validity verdict and never halts the pipeline, so the document is still
+# structurally valid while carrying a budget finding at step 9.
+fail: 9
+expect_valid: true
+expect_budget_step: 9
