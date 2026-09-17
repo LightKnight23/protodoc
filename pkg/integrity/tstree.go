@@ -85,3 +85,41 @@ func buildTSTree(slots []container.SegmentTableSlot) (Digest, error) {
 	}
 	return level[0], nil
 }
+
+// TSRoot returns the T_S root, ALWAYS recomputed from the current live
+// SegmentTable octets (integrity.abnf S2.1, data-model.md S2.11 note 2). It
+// takes no cached-root parameter and has no path that returns a stored value
+// without recomputation: T_S's root is never read from
+// CommitRingRecord.ledger_root as authoritative. It errors only if the slot
+// count exceeds the tree's capacity.
+func TSRoot(slots []container.SegmentTableSlot) (Digest, error) {
+	return buildTSTree(slots)
+}
+
+// LedgerRootVerdict is the outcome of comparing a stored ledger_root against
+// a freshly recomputed T_S root.
+type LedgerRootVerdict int
+
+const (
+	// LedgerRootMatches: the stored ledger_root equals the fresh T_S root.
+	LedgerRootMatches LedgerRootVerdict = iota
+	// LedgerRootDiverges: the stored ledger_root differs from the fresh T_S
+	// root -- a distinct verdict, never silently accepted.
+	LedgerRootDiverges
+)
+
+// CompareLedgerRoot recomputes T_S fresh from slots and compares it against
+// storedLedgerRoot (from CommitRingRecord.ledger_root). It returns
+// LedgerRootMatches or LedgerRootDiverges plus the freshly computed root; the
+// stored value is used ONLY for comparison, never trusted as the answer
+// (data-model.md S2.11 note 2). A capacity error is surfaced.
+func CompareLedgerRoot(slots []container.SegmentTableSlot, storedLedgerRoot Digest) (LedgerRootVerdict, Digest, error) {
+	fresh, err := TSRoot(slots)
+	if err != nil {
+		return LedgerRootDiverges, Digest{}, err
+	}
+	if fresh == storedLedgerRoot {
+		return LedgerRootMatches, fresh, nil
+	}
+	return LedgerRootDiverges, fresh, nil
+}
