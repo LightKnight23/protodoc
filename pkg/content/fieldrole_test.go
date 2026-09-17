@@ -104,6 +104,12 @@ var fieldRoleRegistry = map[string]fieldRole{
 	"Note.Anchor":    roleIdentityComponent,
 	"Note.BodyBlock": roleIdentityComponent,
 	"Note.Placement": roleEnum,
+
+	// CrossReference.
+	"CrossReference.ID":     roleIdentityComponent,
+	"CrossReference.Target": roleIdentityComponent,
+	"CrossReference.Kind":   roleEnum,
+	"CrossReference.Anchor": roleIdentityComponent,
 }
 
 // TestCON_001_AFieldRoleAuditHasNoPersistedCountedPosition is T-0083's named
