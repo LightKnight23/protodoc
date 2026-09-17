@@ -29,6 +29,9 @@ type ContentRecord struct {
 	UnitID     pdlfmt.UnitID
 	Frame      []byte
 	Redactable bool
+	// Salt is the 32-octet per-subtree CSPRNG salt used when Redactable is
+	// true (integrity.abnf S2.2 tc-salt); ignored for non-redactable records.
+	Salt [SaltSize]byte
 }
 
 // OrderRecords returns records in T_C subtree ordinal order: ascending
