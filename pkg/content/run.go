@@ -84,3 +84,32 @@ func scalarByteOffset(text string, i int) (int, bool) {
 	}
 	return 0, false
 }
+
+// SplitRun splits r at scalar-value index at (0 <= at <= r.ScalarLen()),
+// returning the left piece [0,at) and the right piece [at,end). Both pieces
+// share r's run_id -- splitting a run never mints a new identity (FR-020,
+// DP-003/DP-004): only base_ordinal shifts. The left piece keeps r's
+// BaseOrdinal; the right piece's BaseOrdinal is r.BaseOrdinal+at, so a
+// character's identity (run_id, base_ordinal+offset) is invariant across the
+// split. at is a run-internal scalar-value index, never a document position.
+//
+// A split at 0 or at ScalarLen() is legal and yields one empty piece and one
+// equal-to-r piece (identity still preserved); at outside [0,ScalarLen()] is
+// rejected. Splitting is exactly invertible by MergeRuns (T-0070).
+func SplitRun(r Run, at int) (left, right Run, ok bool) {
+	byteAt, valid := scalarByteOffset(r.Text, at)
+	if !valid {
+		return Run{}, Run{}, false
+	}
+	left = Run{
+		RunID:       r.RunID,
+		BaseOrdinal: r.BaseOrdinal,
+		Text:        r.Text[:byteAt],
+	}
+	right = Run{
+		RunID:       r.RunID,
+		BaseOrdinal: r.BaseOrdinal + uint32(at),
+		Text:        r.Text[byteAt:],
+	}
+	return left, right, true
+}
