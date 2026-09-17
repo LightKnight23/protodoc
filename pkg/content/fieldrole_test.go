@@ -83,6 +83,21 @@ var fieldRoleRegistry = map[string]fieldRole{
 	// NonNFCError.
 	"NonNFCError.RunID": roleIdentityComponent,
 	"NonNFCError.Text":  roleScalarValue,
+
+	// Table / CellEntry: row and column ids are content identities (minted
+	// once, reorderable like a run_id), never positional indices.
+	"Table.ID":          roleIdentityComponent,
+	"Table.Rows":        roleIdentityComponent,
+	"Table.Columns":     roleIdentityComponent,
+	"Table.Cells":       roleScalarValue,
+	"CellEntry.Row":     roleIdentityComponent,
+	"CellEntry.Col":     roleIdentityComponent,
+	"CellEntry.Content": roleIdentityComponent,
+
+	// TableTilingError.
+	"TableTilingError.Kind": roleEnum,
+	"TableTilingError.Row":  roleIdentityComponent,
+	"TableTilingError.Col":  roleIdentityComponent,
 }
 
 // TestCON_001_AFieldRoleAuditHasNoPersistedCountedPosition is T-0083's named
