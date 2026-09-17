@@ -15,6 +15,7 @@
 package integrity
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 
@@ -190,6 +191,24 @@ func appendRanges(dst []byte, ranges []SegmentRange) []byte {
 		elems[i] = e
 	}
 	return pdlfmt.AppendPlainSeq(dst, elems)
+}
+
+// Digest returns coverage-descriptor-digest (integrity.abnf S3.2): SHA-256
+// over the descriptor's own canonical encoded octets exactly as carried inside
+// the SIGNATURE record. This is the value that participates in the
+// signed_object preimage, so any change to a range entry or the bitmask
+// changes the digest even though the descriptor is also carried verbatim
+// alongside it. It is deterministic: equal descriptors always yield the same
+// digest, because Encode is the single canonical encoding.
+func (d CoverageDescriptor) Digest() (Digest, error) {
+	enc, err := d.Encode(nil)
+	if err != nil {
+		return Digest{}, err
+	}
+	var out Digest
+	sum := sha256.Sum256(enc)
+	copy(out[:], sum[:])
+	return out, nil
 }
 
 // DecodeCoverageDescriptor decodes a descriptor from the leading octets of
