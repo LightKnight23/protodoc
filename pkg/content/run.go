@@ -140,3 +140,49 @@ func MergeRuns(a, b Run) (Run, bool) {
 		Text:        a.Text + b.Text,
 	}, true
 }
+
+// MoveRun returns a new run sequence with the run at index from relocated to
+// index to, preserving the relative order of the others. Moving a run
+// changes only its position in the traversal/storage order (external
+// positional metadata); it never alters any run's run_id, base_ordinal or
+// text (FR-020). The input slice is not mutated. from and to must be valid
+// indices; otherwise ok is false.
+func MoveRun(runs []Run, from, to int) (out []Run, ok bool) {
+	n := len(runs)
+	if from < 0 || from >= n || to < 0 || to >= n {
+		return nil, false
+	}
+	out = make([]Run, 0, n)
+	out = append(out, runs[:from]...)
+	out = append(out, runs[from+1:]...) // remove the moved run
+	// Insert it at to (relative to the post-removal slice, to is an index
+	// into the original sequence; clamp into the rebuilt slice).
+	moved := runs[from]
+	tail := append([]Run(nil), out[to:]...)
+	out = append(out[:to], moved)
+	out = append(out, tail...)
+	return out, true
+}
+
+// ReorderRuns returns a new run sequence permuted by perm: out[i] =
+// runs[perm[i]]. perm must be a permutation of [0,len(runs)); otherwise ok
+// is false. Reordering changes only traversal order, never any run's
+// run_id, base_ordinal or text (FR-020). The input slice is not mutated.
+func ReorderRuns(runs []Run, perm []int) (out []Run, ok bool) {
+	n := len(runs)
+	if len(perm) != n {
+		return nil, false
+	}
+	seen := make([]bool, n)
+	for _, p := range perm {
+		if p < 0 || p >= n || seen[p] {
+			return nil, false // not a valid permutation
+		}
+		seen[p] = true
+	}
+	out = make([]Run, n)
+	for i, p := range perm {
+		out[i] = runs[p]
+	}
+	return out, true
+}
