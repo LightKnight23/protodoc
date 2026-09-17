@@ -301,3 +301,13 @@ harness rather than an ABNF parser generator. The following is the intended CI s
    verify clause) requires each of the 11 verbs be exercised by at least one conformance case per the
    traceability table in `cli.md` S13, asserting the documented exit code, `status` name and JSON payload
    shape for at least one success and one failure case per verb.
+
+## Extension-token registry governance (CON-021)
+
+The extension-token space's owner-id partition (registered / owner-scoped / permanently-retired) is
+defined in `container.abnf` S5.2. The **governance** of the registered tier -- the published maximum
+review turnaround (15 business days) and the per-request/per-release mechanism that tracks observed
+turnaround against it (metric `G-REG`) -- is a process obligation, not a wire mechanism, and lives in
+[`docs/token-registry-governance.md`](../../../docs/token-registry-governance.md) (CON-021). Owner-scoped
+tokens are self-issued and out of scope for the review SLA; the reserved and permanently-retired
+namespaces are never issued.
