@@ -87,6 +87,34 @@ func ResolveOrphan(a Annotation, order DocumentOrder, deleted map[pdlfmt.UnitID]
 	return prev, next
 }
 
+// OrphanContext supplies the values that can only be captured at the moment
+// of orphaning, before the anchored content that carried them is gone: the
+// annotation's author and the anchored text as it read at orphaning time.
+// Prev/Next are resolved from the document order, not supplied here.
+type OrphanContext struct {
+	Author     uint16
+	QuotedText string // the anchored text at orphaning time (must be NFC-scoped)
+}
+
+// OrphanOnDelete converts annotation a to an orphan and captures ALL FOUR
+// orphan-record fields at the moment of deletion (FR-030): Author and
+// QuotedText from ctx (the values the now-deleted anchored range carried),
+// and Prev/Next resolved deterministically from the document order via
+// ResolveOrphan. It returns the orphaned annotation; a is not mutated. This
+// is the capture step DeleteRange's bulk orphaning defers to when the caller
+// has the per-annotation context to preserve.
+func OrphanOnDelete(a Annotation, ctx OrphanContext, order DocumentOrder, deleted map[pdlfmt.UnitID]struct{}) Annotation {
+	prev, next := ResolveOrphan(a, order, deleted)
+	a.Orphaned = true
+	a.Orphan = OrphanRecord{
+		Author:     ctx.Author,
+		QuotedText: ctx.QuotedText,
+		Prev:       prev,
+		Next:       next,
+	}
+	return a
+}
+
 // DeleteRange records the deletion of the set of run identities in
 // deletedRunIDs from a document containing the given annotations, and
 // returns the updated annotations. An annotation whose anchored span is
