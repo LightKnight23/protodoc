@@ -178,11 +178,33 @@ func DecodeExtEnvelope(src []byte) (ExtEnvelope, error) {
 			e.PositionKey = ap
 		}
 	}
-	// Every field 0..7 is required.
+	// Every field 0..7 is required. A missing field is a structural reject
+	// that names the ext-tok when the tok field itself was present (FR-014:
+	// the reject names the token), so the offending construct is identifiable.
 	for tag := byte(extTagDiscriminant); tag <= extTagPositionKey; tag++ {
 		if !seen[tag] {
-			return e, fmt.Errorf("%w: tag %d", ErrExtEnvelopeMissingField, tag)
+			return e, &MissingFieldError{Tok: e.Tok, TokKnown: seen[extTagTok], Tag: tag}
 		}
 	}
 	return e, nil
 }
+
+// MissingFieldError is the structural rejection for an ext-envelope missing a
+// required field. It names the ext-tok when the tok field was decoded
+// (TokKnown), per FR-014's requirement that the reject name the token, and
+// carries the missing tag. It wraps ErrExtEnvelopeMissingField so callers can
+// still match with errors.Is.
+type MissingFieldError struct {
+	Tok      ExtToken
+	TokKnown bool
+	Tag      byte
+}
+
+func (e *MissingFieldError) Error() string {
+	if e.TokKnown {
+		return fmt.Sprintf("%v: ext-tok %x is missing required field tag %d", ErrExtEnvelopeMissingField, e.Tok, e.Tag)
+	}
+	return fmt.Sprintf("%v: tag %d (ext-tok itself absent)", ErrExtEnvelopeMissingField, e.Tag)
+}
+
+func (e *MissingFieldError) Unwrap() error { return ErrExtEnvelopeMissingField }
