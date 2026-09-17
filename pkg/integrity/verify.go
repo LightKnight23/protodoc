@@ -10,6 +10,29 @@ package integrity
 
 import "Protodoc/pkg/eddsa"
 
+// ActedUponWithinCoverage reports whether every ordinal in the acted-upon set
+// lies within one of the signature's covered ranges (FR-115). If ANY
+// acted-upon octet lies outside every covered range, a reader must present the
+// document as unverified and show no signer identity -- a positive indicator
+// over partial coverage is worse than none. This does not consult the
+// uncovered list: coverage for this purpose is strictly the covered ranges.
+func ActedUponWithinCoverage(cov CoverageDescriptor, actedUpon []uint64) bool {
+	within := func(o uint64) bool {
+		for _, r := range cov.Covered {
+			if o >= r.Start && o < r.End {
+				return true
+			}
+		}
+		return false
+	}
+	for _, o := range actedUpon {
+		if !within(o) {
+			return false
+		}
+	}
+	return true
+}
+
 // SignerIdentity is the signer's public verifying key. It is only ever
 // surfaced in a report alongside a Valid verdict (identity discipline
 // conformance-tested by T-0164).
