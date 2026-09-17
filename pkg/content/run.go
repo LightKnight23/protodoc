@@ -28,6 +28,11 @@ type Run struct {
 	RunID       pdlfmt.UnitID
 	BaseOrdinal uint32
 	Text        string // UTF-8, NFC (normalisation enforced by T-0073/T-0074)
+	// LangRef is the mandatory language-tag reference for this run's text
+	// (FR-031). It resolves to exactly one language tag; the zero value
+	// (LangUnset) means "not declared" and is invalid for a persisted run
+	// (NewRun and the decode path reject it).
+	LangRef LangRef
 }
 
 // ScalarLen returns the number of Unicode scalar values in the run's text.
