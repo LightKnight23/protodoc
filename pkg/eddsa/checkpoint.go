@@ -72,3 +72,17 @@ func checkPublicKey(A [32]byte) error {
 	}
 	return nil
 }
+
+// checkR runs EdDSA-Protodoc-1 Steps 3-4 on the signature's R component: the
+// identical canonical-magnitude and small-order checks as checkPublicKey,
+// applied to R. It returns nil only when R passes both. R (like A) is a
+// public value.
+func checkR(R [32]byte) error {
+	if !isCanonicalMagnitude(R) {
+		return ErrNonCanonicalEncoding
+	}
+	if isSmallOrderEncoding(R) {
+		return ErrSmallOrderPoint
+	}
+	return nil
+}
