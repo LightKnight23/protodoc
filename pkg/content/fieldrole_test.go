@@ -98,6 +98,12 @@ var fieldRoleRegistry = map[string]fieldRole{
 	"TableTilingError.Kind": roleEnum,
 	"TableTilingError.Row":  roleIdentityComponent,
 	"TableTilingError.Col":  roleIdentityComponent,
+
+	// Note.
+	"Note.ID":        roleIdentityComponent,
+	"Note.Anchor":    roleIdentityComponent,
+	"Note.BodyBlock": roleIdentityComponent,
+	"Note.Placement": roleEnum,
 }
 
 // TestCON_001_AFieldRoleAuditHasNoPersistedCountedPosition is T-0083's named
