@@ -111,7 +111,7 @@ func notImplemented(verb string) RunFunc {
 // stated order: "validate, inspect, extract, verify, diff, merge, project,
 // redact, publish, sign and migrate".
 var verbs = []Verb{
-	{Name: "validate", Usage: "protodoc validate <file>", Run: notImplemented("validate")},
+	{Name: "validate", Usage: "protodoc validate <file>", Run: runValidate},
 	{Name: "inspect", Usage: "protodoc inspect <file>", Run: runInspect},
 	{Name: "extract", Usage: "protodoc extract <file> [--to <path>] [--locators]", Run: notImplemented("extract")},
 	{Name: "verify", Usage: "protodoc verify <file> [--signature <id>] [--offline]", Run: notImplemented("verify")},
