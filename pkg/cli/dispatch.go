@@ -118,10 +118,10 @@ var verbs = []Verb{
 	{Name: "diff", Usage: "protodoc diff <fileA> <fileB> [--format=json|text]", Run: runDiff},
 	{Name: "merge", Usage: "protodoc merge <base> <a> <b> --out <path>", Run: runMerge},
 	{Name: "project", Usage: "protodoc project <file> --to <path> [--format=text|html]", Run: runProject},
-	{Name: "redact", Usage: "protodoc redact <file> --subtree <unit-id> [--subtree <unit-id>...] --out <path>", Run: notImplemented("redact")},
-	{Name: "publish", Usage: "protodoc publish <file> --out <path> [--partial]", Run: notImplemented("publish")},
-	{Name: "sign", Usage: "protodoc sign <file> --key <ref> --coverage total|subset [--subset-range <start>:<end> ...] --intent <value> --out <path>", Run: notImplemented("sign")},
-	{Name: "migrate", Usage: "protodoc migrate <file> --to-major <N> --out <path> [--rescind-and-resign --new-key <ref> --new-param-set <id>]", Run: notImplemented("migrate")},
+	{Name: "redact", Usage: "protodoc redact <file> --subtree <unit-id> [--subtree <unit-id>...] --out <path>", Run: runRedact},
+	{Name: "publish", Usage: "protodoc publish <file> --out <path> [--partial]", Run: runPublish},
+	{Name: "sign", Usage: "protodoc sign <file> --key <ref> --coverage total|subset [--subset-range <start>:<end> ...] --intent <value> --out <path>", Run: runSign},
+	{Name: "migrate", Usage: "protodoc migrate <file> --to-major <N> --out <path> [--rescind-and-resign --new-key <ref> --new-param-set <id>]", Run: runMigrate},
 }
 
 // Names returns the registered verb names, in registration order.
