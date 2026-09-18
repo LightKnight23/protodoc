@@ -14,9 +14,25 @@ import (
 	"errors"
 	"fmt"
 
+	"Protodoc/pkg/ceilings"
 	"Protodoc/pkg/container"
 	"Protodoc/pkg/pdlfmt"
 )
+
+// minOpOctets is the smallest possible encoded operation-record: op-kind(1) +
+// op-target(16) + op-predecessor(32) + op-order-key(32) + a 1-octet varint
+// zero-length payload = 82 octets. Used to bound a declared op count against
+// the remaining input before allocation.
+const minOpOctets = 1 + 16 + 32 + 32 + 1
+
+// ErrOpBatchOversized is returned when a HISTORY_OP_BATCH operations field-
+// value exceeds the MAX_DECODED_UNIT ceiling.
+var ErrOpBatchOversized = errors.New("history: HISTORY_OP_BATCH exceeds the MAX_DECODED_UNIT ceiling")
+
+// MaxOpBatchOctets returns the decoded-unit octet ceiling (MAX_DECODED_UNIT)
+// that bounds a HISTORY_OP_BATCH, from the single-source-of-truth ceiling
+// table.
+func MaxOpBatchOctets() uint64 { return ceilings.MustMax("MAX_DECODED_UNIT") }
 
 // HISTORY_OP_BATCH discriminant + TLV tags (document.abnf S9).
 const (
@@ -142,11 +158,21 @@ func DecodeOpBatch(src []byte) ([]OperationRecord, error) {
 			}
 			sawDisc = true
 		case hobTagOperations:
+			// FR-106 / CP-012: the whole operations field-value is bounded by
+			// the decoded-unit ceiling, and the declared op count is bounded by
+			// the remaining octets (each op is at least minOpOctets), both
+			// checked BEFORE any allocation.
+			if uint64(len(f.Value)) > MaxOpBatchOctets() {
+				return nil, fmt.Errorf("%w: %d octets exceeds MAX_DECODED_UNIT %d", ErrOpBatchOversized, len(f.Value), MaxOpBatchOctets())
+			}
 			count, n, err := pdlfmt.DecodeSeqCount(f.Value)
 			if err != nil {
 				return nil, fmt.Errorf("history: op batch count: %w", err)
 			}
 			pos := n
+			if count > uint64((len(f.Value)-pos)/minOpOctets) {
+				return nil, fmt.Errorf("%w: op count %d exceeds the %d octets remaining", ErrOpBatchTruncated, count, len(f.Value)-pos)
+			}
 			for i := uint64(0); i < count; i++ {
 				op, consumed, err := decodeOperation(f.Value[pos:])
 				if err != nil {
