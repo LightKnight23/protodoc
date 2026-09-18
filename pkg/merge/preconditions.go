@@ -39,6 +39,57 @@ func (e *DuplicateIdentifierError) Error() string {
 
 func (e *DuplicateIdentifierError) Unwrap() error { return ErrDuplicateIdentifier }
 
+// ErrMissingPredecessor is returned when a transmitted change's causal
+// predecessor is not held by the reader (FR-095).
+var ErrMissingPredecessor = errors.New("merge: transmitted change's causal predecessor is not held")
+
+// MissingPredecessorError names the missing predecessor's identifier (FR-095:
+// report the missing predecessor's identifier).
+type MissingPredecessorError struct {
+	Predecessor [32]byte // the missing causal predecessor state-id
+}
+
+func (e *MissingPredecessorError) Error() string {
+	return fmt.Sprintf("%v: missing predecessor %x", ErrMissingPredecessor, e.Predecessor)
+}
+
+func (e *MissingPredecessorError) Unwrap() error { return ErrMissingPredecessor }
+
+// PredecessorDisposition is what a reader does with a change whose predecessor
+// it does not hold: buffer it (hold for later) or refuse it. Both are
+// conforming (FR-095: "buffer OR refuse"); neither applies the change.
+type PredecessorDisposition int
+
+const (
+	// Buffered: the change is held pending its predecessor's arrival.
+	Buffered PredecessorDisposition = iota
+	// Refused: the change is rejected outright.
+	Refused
+	// Applicable: the predecessor is held; the change may be applied.
+	Applicable
+)
+
+// zeroState is the all-zero state-id (a root change with no predecessor).
+var zeroState [32]byte
+
+// CheckCausalPredecessor decides the disposition of a transmitted change with
+// the given causal predecessor state-id, against the set of states the reader
+// holds. A change whose predecessor is held (or whose predecessor is the zero
+// root) is Applicable. Otherwise the reader must NOT apply it: it returns the
+// caller's chosen non-applying disposition (buffer or refuse) together with a
+// *MissingPredecessorError naming the missing predecessor. `bufferPolicy`
+// selects buffering (true) or refusal (false); either satisfies FR-095.
+func CheckCausalPredecessor(predecessor [32]byte, held map[[32]byte]bool, bufferPolicy bool) (PredecessorDisposition, error) {
+	if predecessor == zeroState || held[predecessor] {
+		return Applicable, nil
+	}
+	err := &MissingPredecessorError{Predecessor: predecessor}
+	if bufferPolicy {
+		return Buffered, err
+	}
+	return Refused, err
+}
+
 // CheckDuplicateIdentifier refuses a merge when a unit in inputA and a unit in
 // inputB share an identifier but are DISTINCT (different content digest) --
 // two lineages independently minting the same id (FR-024). A shared id with an
