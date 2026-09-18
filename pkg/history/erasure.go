@@ -88,6 +88,41 @@ var (
 	ErrErasureMissingField = errors.New("history: ERASURE_RECORD missing a required field")
 )
 
+// SeveredState describes a previously-published state that a retention advance
+// renders unreconstructable: its identity, its content digest as it stood, and
+// its segment ordinal.
+type SeveredState struct {
+	Identity pdlfmt.UnitID
+	Digest   pdlfmt.Digest256
+	Ordinal  uint16
+	Salt     [SaltSize]byte
+}
+
+// EnumerateErasuresOnRetentionAdvance returns an ErasureRecord for every
+// previously-published state that becomes unreconstructable when the retention
+// point advances from oldPoint to newPoint (newPoint > oldPoint): a state whose
+// ordinal is in [oldPoint, newPoint) was reconstructable before and is not
+// after, so FR-061 requires it be enumerated with its identity and salted
+// commitment. Each returned record is TRIMMED (salt destroyed), the persistent
+// form. States outside that window are not enumerated. It errors if newPoint
+// does not advance past oldPoint.
+func EnumerateErasuresOnRetentionAdvance(oldPoint, newPoint uint16, severed []SeveredState) ([]ErasureRecord, error) {
+	if newPoint <= oldPoint {
+		return nil, ErrRetentionNotAdvanced
+	}
+	var out []ErasureRecord
+	for _, s := range severed {
+		if s.Ordinal >= oldPoint && s.Ordinal < newPoint {
+			out = append(out, NewErasureRecord(s.Identity, s.Digest, s.Salt).Trimmed())
+		}
+	}
+	return out, nil
+}
+
+// ErrRetentionNotAdvanced is returned when a retention advance does not move
+// the point forward.
+var ErrRetentionNotAdvanced = errors.New("history: retention point did not advance")
+
 // Encode encodes the ErasureRecord to its byte-exact PDL-TLV wire form
 // (fields 0..4 in ascending tag order).
 func (r ErasureRecord) Encode() ([]byte, error) {
