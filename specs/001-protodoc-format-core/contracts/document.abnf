@@ -318,7 +318,7 @@ note-body-block     = field                         ; tag=3; field-value = unit-
 note-placement      = field                         ; tag=4; field-value = u8: 0x00 = footnote, 0x01 = endnote;
                                                      ; 0x02-0xFF reserved, MUST be rejected.
 
-cross-reference     = xref-discriminant xref-id xref-target xref-kind xref-anchor xref-presentation-fn
+cross-reference     = xref-discriminant xref-id xref-target xref-kind xref-anchor xref-presentation-fn xref-target-digest
 xref-discriminant   = %x05                          ; tag=0
 xref-id             = field                         ; tag=1; field-value = unit-id
 xref-target         = field                         ; tag=2; field-value = unit-id of the referenced unit.
@@ -355,6 +355,14 @@ xref-presentation-fn = field                        ; tag=5; field-value = u8 na
                                                      ; rejected. NORMATIVE (FR-084): the rendered reference text is a
                                                      ; deterministic function of the resolved target, NOT authored frozen
                                                      ; text. Provisional per T-0267 (clarify-002.md, OPEN).
+xref-target-digest  = field                         ; tag=6; field-value = digest256, bound to the target unit's state
+                                                     ; at the moment the reference was materialised — the same
+                                                     ; input-digest-binding pattern PresentationArtefact, Frontmatter-
+                                                     ; preview and PageDirectory/UnitIndex use for their inputs.
+                                                     ; NORMATIVE (FR-085): a reader detects a STALE reference by
+                                                     ; comparing this digest against the target's CURRENT state digest
+                                                     ; alone; the mismatch is reported WITHOUT computing any layout.
+                                                     ; Provisional per T-0267 (clarify-002.md, OPEN).
 
 ; ---- 5.1 ROOT_SEQUENCE (authored reading-order record) --------------------
 ; The document's authoritative logical reading order over its content units
