@@ -79,6 +79,15 @@ func (s StateSnapshot) Octets() []byte {
 // authoring state (op-order-key) in the log, so it cannot be reconstructed.
 var ErrTargetStateNotInLog = errors.New("history: target state-id is not a published state in the operation log")
 
+// StateReconstructable reports, for a retained-from-point document, whether the
+// state at the given segment ordinal is GUARANTEED reconstructable (FR-060):
+// true iff ordinal >= retentionPoint. States before the retention point were
+// not retained and carry no guarantee. For complete-history mode every ordinal
+// is reconstructable; this helper is for the retained-from-point case.
+func StateReconstructable(retentionPoint, stateOrdinal uint16) bool {
+	return stateOrdinal >= retentionPoint
+}
+
 // Reconstruct replays ops (in stored order) from base up to and INCLUDING the
 // operation whose op-order-key is target, returning that state's snapshot. Each
 // op applies deterministically; the log must be in a legal linearization
