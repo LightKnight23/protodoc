@@ -603,7 +603,7 @@ coordinates or storage/append order.
 
 Invariants:
 1. `rs_order` lists EVERY content unit in the document EXACTLY ONCE — no duplicates, no omissions (validator rule
-   PD-A11Y-001; T-0274). A unit absent from `rs_order`, or listed twice, is a structural reject naming the unit id.
+   PD-A11Y-005; T-0274). A unit absent from `rs_order`, or listed twice, is a structural reject naming the unit id.
 2. `rs_order` is the authoritative reading order and is INDEPENDENT of storage/append order: a unit inserted
    logically mid-document (and therefore appended at the end of storage) still appears at its authored position
    in `rs_order`.

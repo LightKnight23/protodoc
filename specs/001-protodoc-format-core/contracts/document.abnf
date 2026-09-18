@@ -118,7 +118,10 @@ nfc-string    = varint *OCTET               ; NORMATIVE: varint = octet length, 
 ;               content (a salted severance commitment) is a redaction-adjacent construct, not a
 ;               structural or content-model one. Reserved here as a numeric assignment for completeness
 ;               of this registry; not restated field-by-field in this file.
-;   0x0E - 0x3F reserved for future CONTENT/RESOURCE/HISTORY record kinds; v1 does not assign any of
+;   0x0E  ROOT_SEQUENCE           legal in: CONTENT                          (S5.1)
+;               NORMATIVE: the singleton authored reading-order record (FR-036, data-model.md 2.27); a
+;               document has at most one. Provisional per T-0267 (clarify-002.md, OPEN).
+;   0x0F - 0x3F reserved for future CONTENT/RESOURCE/HISTORY record kinds; v1 does not assign any of
 ;               them. A v1 reader MUST REJECT a frame carrying one of these values (same PD-DISC-001
 ;               rule as the 0x80-0xFE range; the two ranges are reserved for the same reason and differ
 ;               only in which future version -- a v1.x capability generation versus a v2 major version
@@ -127,8 +130,8 @@ nfc-string    = varint *OCTET               ; NORMATIVE: varint = octet length, 
 ;               discriminant at all.)
 ;
 ; NORMATIVE: a segment whose SegmentTableSlot.slot-segment-type = CONTENT (1) MUST contain only frames
-; discriminated 0x01-0x06 (PRESENTATION_ARTEFACT, 0x0C, is RESOURCE-only, never legal in a CONTENT
-; segment); = RESOURCE (2) MUST contain only frames discriminated 0x06-0x0A or 0x0C; = HISTORY (3) MUST
+; discriminated 0x01-0x06 or 0x0E (ROOT_SEQUENCE; PRESENTATION_ARTEFACT, 0x0C, is RESOURCE-only, never
+; legal in a CONTENT segment); = RESOURCE (2) MUST contain only frames discriminated 0x06-0x0A or 0x0C; = HISTORY (3) MUST
 ; contain only frames discriminated 0x0B (history_mode != NO_HISTORY) or 0x0D (history_mode =
 ; NO_HISTORY, ERASURE_RECORD, shape in integrity.abnf S7.2), never a mix of the two within one segment.
 ; A frame whose discriminant is well-formed but illegal for its enclosing segment's slot-segment-type is
@@ -339,7 +342,7 @@ xref-anchor         = field                         ; tag=4; field-value = ancho
 ; The document's authoritative logical reading order over its content units
 ; (FR-036, data-model.md 2.27). Provisional per T-0267 (clarify-002.md, OPEN).
 root-sequence       = rs-discriminant rs-id rs-order
-rs-discriminant     = %x07                          ; tag=0
+rs-discriminant     = %x0E                          ; tag=0; ROOT_SEQUENCE, CONTENT-legal (registry S1, 0x0E);
 rs-id               = field                         ; tag=1; field-value = unit-id; the singleton record's own identity
 rs-order            = field                         ; tag=2; field-value = plain-seq-of(unit-id); the authored reading
                                                      ; order, top-to-bottom. NORMATIVE (PD-A11Y-005, T-0274): EVERY
