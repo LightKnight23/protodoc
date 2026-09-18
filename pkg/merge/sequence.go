@@ -46,7 +46,19 @@ func MergeSequence(elems []SeqElement) []SeqElement {
 	}
 	for _, r := range order {
 		g := runs[r]
-		sort.SliceStable(g, func(i, j int) bool { return g[i].BaseOrdinal < g[j].BaseOrdinal })
+		sort.SliceStable(g, func(i, j int) bool {
+			if g[i].BaseOrdinal != g[j].BaseOrdinal {
+				return g[i].BaseOrdinal < g[j].BaseOrdinal
+			}
+			// Two elements sharing (run_id, base_ordinal) is a malformed input
+			// (a character identity is unique), but the merge must still be
+			// TOTAL and deterministic: tiebreak by authoring state-id, then by
+			// value, so the order never depends on input order.
+			if c := bytes.Compare(g[i].StateID[:], g[j].StateID[:]); c != 0 {
+				return c < 0
+			}
+			return g[i].Value < g[j].Value
+		})
 		runs[r] = g
 	}
 	// Order the runs against each other by their authoring state-id (the
@@ -56,7 +68,14 @@ func MergeSequence(elems []SeqElement) []SeqElement {
 	sort.SliceStable(order, func(i, j int) bool {
 		a := runs[order[i]][0].StateID
 		b := runs[order[j]][0].StateID
-		return bytes.Compare(a[:], b[:]) < 0
+		if c := bytes.Compare(a[:], b[:]); c != 0 {
+			return c < 0
+		}
+		// Two distinct runs sharing one authoring state-id tie on R2; break
+		// deterministically by run_id (unique per run, unsigned big-endian) so
+		// the whole-burst order never depends on input order.
+		ri, rj := order[i], order[j]
+		return bytes.Compare(ri[:], rj[:]) < 0
 	})
 	// Concatenate the ordered runs.
 	var out []SeqElement
@@ -75,7 +94,15 @@ func BurstSubstring(elems []SeqElement, runID pdlfmt.UnitID) []byte {
 			g = append(g, e)
 		}
 	}
-	sort.SliceStable(g, func(i, j int) bool { return g[i].BaseOrdinal < g[j].BaseOrdinal })
+	sort.SliceStable(g, func(i, j int) bool {
+		if g[i].BaseOrdinal != g[j].BaseOrdinal {
+			return g[i].BaseOrdinal < g[j].BaseOrdinal
+		}
+		if c := bytes.Compare(g[i].StateID[:], g[j].StateID[:]); c != 0 {
+			return c < 0
+		}
+		return g[i].Value < g[j].Value
+	})
 	var b []byte
 	for _, e := range g {
 		b = append(b, e.Value)
