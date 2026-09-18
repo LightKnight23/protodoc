@@ -11,6 +11,8 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+
+	"Protodoc/pkg/pdlfmt"
 )
 
 // TrustAnchors is a fixed, locally-held set of trust anchors (root
@@ -138,6 +140,57 @@ func derSequenceLen(b []byte) (int, error) {
 		return 0, errors.New("integrity: credential-chain DER length runs past input")
 	}
 	return total, nil
+}
+
+// FullEvidenceResult reports whether a signature's complete LTV evidence chain
+// verifies offline: the signatory's own credential chain, its revocation
+// evidence (when present), and its time attestation together with the
+// attesting authority's nested credential chain and revocation.
+type FullEvidenceResult struct {
+	CredentialChainTrusted bool
+	TimeAttestationTrusted bool
+	// AllTrusted is true iff every mandatory element verified offline.
+	AllTrusted bool
+}
+
+// VerifyFullEvidenceChainOffline verifies a signature's ENTIRE LTV evidence
+// chain OFFLINE (FR-070): the signatory's credential chain against the local
+// anchors at the attested time, the revocation evidence (when a non-zero16 ref
+// is present) by offline parse, and the time attestation with its own nested
+// credential chain and revocation. Verification uses only the caller-supplied
+// attested time and fixed anchors -- never the wall clock and never the
+// network -- so the verdict is a pure function of the document's own evidence
+// and the fixed anchors, hence STABLE across time. LTV-ref kinds are checked
+// first (CheckSignatureLtvRefs).
+func VerifyFullEvidenceChainOffline(sig SignatureRecord, opt OfflineVerifyOptions, resolve EvidenceResolver) (FullEvidenceResult, error) {
+	var res FullEvidenceResult
+	if err := CheckSignatureLtvRefs(sig, resolve); err != nil {
+		return res, err
+	}
+
+	credEv, _ := resolve(sig.CredChainRef)
+	credTrusted, err := VerifyCredentialChainOffline(credEv, opt)
+	if err != nil {
+		return res, err
+	}
+	res.CredentialChainTrusted = credTrusted
+
+	if (sig.RevocationRef != pdlfmt.UnitID{}) {
+		revEv, _ := resolve(sig.RevocationRef)
+		if err := VerifyRevocationEvidenceParsesOffline(revEv); err != nil {
+			return res, err
+		}
+	}
+
+	timeEv, _ := resolve(sig.TimeAttestationRef)
+	timeTrusted, err := VerifyTimeAttestationOffline(timeEv, opt, resolve)
+	if err != nil {
+		return res, err
+	}
+	res.TimeAttestationTrusted = timeTrusted
+
+	res.AllTrusted = credTrusted && timeTrusted
+	return res, nil
 }
 
 // ErrRevocationEvidenceEmpty is returned when a revocation-evidence record
