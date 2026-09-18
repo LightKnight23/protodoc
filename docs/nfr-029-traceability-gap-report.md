@@ -82,9 +82,9 @@ choose between.
 
 ## Full gap list
 
-### Requirement ids with zero conformance cases (1)
+### Requirement ids with zero conformance cases (0)
 
-NFR-025
+_(none — every normative requirement now has at least one conformance case)_
 
 ### Rule ids with zero conformance cases (11)
 

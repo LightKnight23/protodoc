@@ -2,7 +2,6 @@ package traceability
 
 import (
 	"os"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -127,11 +126,16 @@ func TestNFR_029_AllNormativeStatementsHaveConformanceCase(t *testing.T) {
 
 	docReqGaps, docRuleGaps := checkedInGapIDs(t)
 
-	if !reflect.DeepEqual(liveReqGaps, docReqGaps) {
+	// Normalize nil vs empty-slice: an empty live list (var []string, nil) and
+	// an empty parsed doc list ([]string{} from dedupSorted) are equal in
+	// meaning. reflect.DeepEqual distinguishes them, so compare via a helper
+	// that treats both empties as equal. This path is reached once every
+	// requirement has a conformance case (the req gap list is empty).
+	if !gapListsEqual(liveReqGaps, docReqGaps) {
 		t.Errorf("traceability: %s requirement-id gap list has drifted from the live audit.\nlive:  %v\ndoc:   %v\nRegenerate with `go run ./cmd/protodoc-traceaudit` and update the checked-in report.",
 			gapReportDocPath, liveReqGaps, docReqGaps)
 	}
-	if !reflect.DeepEqual(liveRuleGaps, docRuleGaps) {
+	if !gapListsEqual(liveRuleGaps, docRuleGaps) {
 		t.Errorf("traceability: %s rule-id gap list has drifted from the live audit.\nlive:  %v\ndoc:   %v\nRegenerate with `go run ./cmd/protodoc-traceaudit` and update the checked-in report.",
 			gapReportDocPath, liveRuleGaps, docRuleGaps)
 	}
@@ -182,4 +186,22 @@ func TestNFR_029_AllNormativeStatementsHaveConformanceCase_ReleaseGateFailsClose
 			t.Errorf("releaseGateBlocks(%q, %v) = %v, want %v (%s)", c.envVal, c.gaps, got, c.want, c.name)
 		}
 	}
+}
+
+// gapListsEqual reports whether two gap-id lists are equal, treating a nil
+// slice and a zero-length slice as equal (both mean "no gaps"). This is the
+// only difference from reflect.DeepEqual, which distinguishes []string(nil)
+// from []string{} — a distinction that is meaningless for a gap list and that
+// would otherwise spuriously fail the drift check once a category reaches zero
+// gaps.
+func gapListsEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
