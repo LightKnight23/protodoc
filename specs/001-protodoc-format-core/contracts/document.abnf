@@ -121,7 +121,11 @@ nfc-string    = varint *OCTET               ; NORMATIVE: varint = octet length, 
 ;   0x0E  ROOT_SEQUENCE           legal in: CONTENT                          (S5.1)
 ;               NORMATIVE: the singleton authored reading-order record (FR-036, data-model.md 2.27); a
 ;               document has at most one. Provisional per T-0267 (clarify-002.md, OPEN).
-;   0x0F - 0x3F reserved for future CONTENT/RESOURCE/HISTORY record kinds; v1 does not assign any of
+;   0x0F  PRESENTATION_REGION_2D  legal in: CONTENT                          (S5.2)
+;               NORMATIVE (FR-099): a 2D-presentation region for content that cannot be expressed as pure
+;               linear flow; carries a mandatory linearised-reading-order reference into ROOT_SEQUENCE and
+;               a mandatory text alternative. Provisional per T-0267 (clarify-002.md, OPEN).
+;   0x10 - 0x3F reserved for future CONTENT/RESOURCE/HISTORY record kinds; v1 does not assign any of
 ;               them. A v1 reader MUST REJECT a frame carrying one of these values (same PD-DISC-001
 ;               rule as the 0x80-0xFE range; the two ranges are reserved for the same reason and differ
 ;               only in which future version -- a v1.x capability generation versus a v2 major version
@@ -130,7 +134,8 @@ nfc-string    = varint *OCTET               ; NORMATIVE: varint = octet length, 
 ;               discriminant at all.)
 ;
 ; NORMATIVE: a segment whose SegmentTableSlot.slot-segment-type = CONTENT (1) MUST contain only frames
-; discriminated 0x01-0x06 or 0x0E (ROOT_SEQUENCE; PRESENTATION_ARTEFACT, 0x0C, is RESOURCE-only, never
+; discriminated 0x01-0x06 or 0x0E (ROOT_SEQUENCE) or 0x0F (PRESENTATION_REGION_2D; PRESENTATION_ARTEFACT,
+; 0x0C, is RESOURCE-only, never
 ; legal in a CONTENT segment); = RESOURCE (2) MUST contain only frames discriminated 0x06-0x0A or 0x0C; = HISTORY (3) MUST
 ; contain only frames discriminated 0x0B (history_mode != NO_HISTORY) or 0x0D (history_mode =
 ; NO_HISTORY, ERASURE_RECORD, shape in integrity.abnf S7.2), never a mix of the two within one segment.
@@ -375,6 +380,23 @@ rs-order            = field                         ; tag=2; field-value = plain
                                                      ; content unit MUST appear EXACTLY ONCE -- no duplicate, no
                                                      ; omission; a violation is rejected naming the offending unit id.
                                                      ; Order is independent of storage/append order.
+
+; ---- 5.2 PRESENTATION_REGION_2D (non-linear content region) ----------------
+; A 2D-presentation region for content that cannot be expressed as pure linear
+; flow (FR-099). It carries a MANDATORY linearised-reading-order reference into
+; ROOT_SEQUENCE and a MANDATORY text alternative (reusing S7's alt-text shape).
+; Provisional per T-0267 (clarify-002.md, OPEN).
+region-2d           = r2-discriminant r2-id r2-linear-ref r2-decorative r2-alttext
+r2-discriminant     = %x0F                          ; tag=0
+r2-id               = field                         ; tag=1; field-value = unit-id; the region's own identity
+r2-linear-ref       = field                         ; tag=2; field-value = unit-id. NORMATIVE (FR-099, PD-2D-001,
+                                                     ; T-0291): MUST resolve into ROOT_SEQUENCE (rs-order) — the
+                                                     ; linearised reading-order position at which this 2D region is
+                                                     ; read; a ref not present in ROOT_SEQUENCE is rejected naming it.
+r2-decorative       = field                         ; tag=3; field-value = u8, same closed set as ri-decorative (S7.1)
+r2-alttext          = field                         ; tag=4; field-value = nfc-string, same shape as ri-alttext (S7.1);
+                                                     ; NORMATIVE (FR-099, PD-2D-001): MANDATORY text alternative for a
+                                                     ; non-decorative region; empty/absent is rejected.
 
 
 ; ============================================================================
