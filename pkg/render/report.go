@@ -55,13 +55,18 @@ func NewRenderReport() *RenderReport {
 }
 
 // RecordSubstitution appends a substitution event naming the resource id, the
-// failure reason, and the substitution kind (FR-112).
+// failure reason, and the substitution kind (FR-112), and marks the resulting
+// pagination NON-authoritative: any render that performed at least one
+// substitution has PaginationAuthoritative = false, so a consumer can tell its
+// page-valued references were resolved against a degraded rendering (T-0260's
+// requirement). A render with zero substitutions leaves it authoritative.
 func (r *RenderReport) RecordSubstitution(resource pdlfmt.UnitID, reason SubstitutionReason, kind SubstitutionKind) {
 	r.Substitutions = append(r.Substitutions, SubstitutionEvent{
 		ResourceID: hexID(resource),
 		Reason:     reason,
 		Kind:       kind,
 	})
+	r.PaginationAuthoritative = false
 }
 
 // MarshalJSON emits the report as machine-readable JSON.
