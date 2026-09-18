@@ -69,14 +69,45 @@ type Declaration struct {
 // declaration is attempted on a document that already declared one.
 var ErrModeImmutable = errors.New("history: history-mode is immutable after creation; a different mode cannot be declared")
 
-// NewDeclaration builds an immutable history-mode declaration. It errors for an
-// invalid mode. A retention point is accepted only for ModeRetainedFromPoint
-// (0 is forced otherwise); the gating detail is refined in T-0213.
+// NewDeclaration builds an immutable history-mode declaration with no
+// retention point (valid for complete/no-history; use
+// NewDeclarationWithRetentionPoint for retained-from-point). It errors for an
+// invalid mode.
 func NewDeclaration(mode Mode) (Declaration, error) {
 	if !ValidMode(mode) {
 		return Declaration{}, ErrInvalidMode
 	}
 	return Declaration{mode: mode}, nil
+}
+
+// ErrRetentionPointModeGated is returned when a non-zero retention point is
+// declared for a mode other than retained-from-point, or when
+// retained-from-point is declared without the retention point being meaningful
+// (CON-022/FR-060: retention-point is meaningful ONLY when history-mode = 1).
+var ErrRetentionPointModeGated = errors.New("history: retention-point is meaningful only in history-retained-from-point mode")
+
+// NewDeclarationWithRetentionPoint builds a retained-from-point declaration
+// carrying the segment ordinal at or after which history is retained. It
+// errors unless the mode is exactly ModeRetainedFromPoint (the retention point
+// is mode-gated, CON-022).
+func NewDeclarationWithRetentionPoint(mode Mode, retentionPoint uint16) (Declaration, error) {
+	if !ValidMode(mode) {
+		return Declaration{}, ErrInvalidMode
+	}
+	if mode != ModeRetainedFromPoint {
+		return Declaration{}, ErrRetentionPointModeGated
+	}
+	return Declaration{mode: mode, retentionPoint: retentionPoint}, nil
+}
+
+// RetentionPoint returns the declared retention point (0 unless the mode is
+// retained-from-point).
+func (d Declaration) RetentionPoint() uint16 { return d.retentionPoint }
+
+// HasMeaningfulRetentionPoint reports whether this declaration's retention
+// point is meaningful -- true only in retained-from-point mode.
+func (d Declaration) HasMeaningfulRetentionPoint() bool {
+	return d.mode == ModeRetainedFromPoint
 }
 
 // Mode returns the declared history mode.
