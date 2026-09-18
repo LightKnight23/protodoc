@@ -27,6 +27,13 @@ type PublishInput struct {
 	// (FR-080). The publish operation strips them; the output is scanned to
 	// confirm none survives.
 	ActorIdentityValues [][]byte
+	// CustodyFixityValues is the set of custody and fixity octet values
+	// (signatures, time attestations) that MUST be present UNCHANGED in the
+	// output (FR-081). Publish appends them verbatim after the content and
+	// never strips them, even if one happens to contain an actor-identity
+	// substring (custody/fixity preservation takes precedence for these
+	// explicitly-preserved values).
+	CustodyFixityValues [][]byte
 }
 
 // PublishOutput is a published document's emitted octets plus the retained
@@ -59,6 +66,13 @@ func Publish(in PublishInput) PublishOutput {
 			continue
 		}
 		out = stripAll(out, v)
+	}
+	// Append every custody and fixity value verbatim AFTER stripping, so they
+	// are preserved unchanged (FR-081) and never removed by the actor-identity
+	// strip above -- custody/fixity preservation is explicit and takes
+	// precedence for these values.
+	for _, v := range in.CustodyFixityValues {
+		out = append(out, v...)
 	}
 	return PublishOutput{Emitted: out}
 }
