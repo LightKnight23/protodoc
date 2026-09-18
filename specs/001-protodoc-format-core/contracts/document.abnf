@@ -148,9 +148,12 @@ nfc-string    = varint *OCTET               ; NORMATIVE: varint = octet length, 
 ; "character number N in the document" would depend on every character before it and is therefore
 ; permanently absent from this grammar, in every record defined below.
 
-text-block          = tb-discriminant tb-block-id tb-language-ref tb-runs tb-continuation
+text-block          = tb-discriminant tb-block-id tb-direction tb-language-ref tb-runs tb-continuation
 tb-discriminant     = %x01                          ; tag=0
 tb-block-id         = field                         ; tag=1; field-value = unit-id
+tb-direction        = field                         ; tag=5; field-value = tb-direction-value; base writing direction
+                                                     ; (FR-032); provisional per T-0267 ruling (clarify-002.md, OPEN)
+tb-direction-value  = %x00 / %x01                   ; CLOSED value set: 0 = LTR, 1 = RTL; any other octet is rejected
 tb-language-ref     = field                         ; tag=2; field-value = u16, registry-issued BCP-47-mapping id, 0 = unset
 tb-runs             = field                         ; tag=3; field-value = plain-seq-of(run-element), >= 1 element;
                                                      ; NORMATIVE: order is the run's own base_ordinal-ascending authored/
@@ -261,9 +264,11 @@ orphan-next         = unit-id                       ; NORMATIVE: symmetric, the 
 ; reference-resolution and FR-109's cycle-detection requirements over cell content. It reuses only
 ; primitives already established elsewhere (unit-id ordering, plain-seq, TextBlock cell content).
 
-table               = tbl-discriminant tbl-id tbl-rows tbl-columns tbl-cells
+table               = tbl-discriminant tbl-id tbl-direction tbl-rows tbl-columns tbl-cells
 tbl-discriminant    = %x03                          ; tag=0
 tbl-id              = field                         ; tag=1; field-value = unit-id
+tbl-direction       = field                         ; tag=5; field-value = %x00 / %x01 (0 = LTR, 1 = RTL); base writing
+                                                     ; direction (FR-032); provisional per T-0267 ruling (clarify-002.md, OPEN)
 tbl-rows            = field                         ; tag=2; field-value = plain-seq-of(unit-id); row ids in current
                                                      ; display order. NORMATIVE: row order is content (a plain-seq); row
                                                      ; insertion is an R1 SEQUENCE-ORDER position-claim over this
