@@ -318,7 +318,7 @@ note-body-block     = field                         ; tag=3; field-value = unit-
 note-placement      = field                         ; tag=4; field-value = u8: 0x00 = footnote, 0x01 = endnote;
                                                      ; 0x02-0xFF reserved, MUST be rejected.
 
-cross-reference     = xref-discriminant xref-id xref-target xref-kind xref-anchor
+cross-reference     = xref-discriminant xref-id xref-target xref-kind xref-anchor xref-presentation-fn
 xref-discriminant   = %x05                          ; tag=0
 xref-id             = field                         ; tag=1; field-value = unit-id
 xref-target         = field                         ; tag=2; field-value = unit-id of the referenced unit.
@@ -347,6 +347,14 @@ xref-kind           = field                         ; tag=3; field-value = u8: 0
                                                      ; 0x03-0xFF reserved, MUST be rejected.
 xref-anchor         = field                         ; tag=4; field-value = anchor-point (S3.1), the reference's own
                                                      ; source position; anchor-boundary is NORMATIVE-ignored, as for NOTE.
+xref-presentation-fn = field                        ; tag=5; field-value = u8 naming HOW the reference renders, computed
+                                                     ; at materialisation as a COMPUTED_INLINE (S5.1/FR-034), never a
+                                                     ; persisted literal: 0x00 = target-page-number, 0x01 = citation-label
+                                                     ; (from the target's SEQUENCE_DEFINITION), 0x02 = target-numbering-
+                                                     ; label, 0x03 = target-title-text; 0x04-0xFF reserved, MUST be
+                                                     ; rejected. NORMATIVE (FR-084): the rendered reference text is a
+                                                     ; deterministic function of the resolved target, NOT authored frozen
+                                                     ; text. Provisional per T-0267 (clarify-002.md, OPEN).
 
 ; ---- 5.1 ROOT_SEQUENCE (authored reading-order record) --------------------
 ; The document's authoritative logical reading order over its content units
