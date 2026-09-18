@@ -113,6 +113,35 @@ func (d Declaration) HasMeaningfulRetentionPoint() bool {
 // Mode returns the declared history mode.
 func (d Declaration) Mode() Mode { return d.mode }
 
+// ErrInPlaceRemovalRefused is returned when an in-place content removal is
+// attempted on a complete-history document (CON-023): complete history forbids
+// destroying past content in place; a removal must instead be a new operation
+// that preserves the prior state.
+var ErrInPlaceRemovalRefused = errors.New("history: in-place content removal is refused under complete-history mode (CON-023)")
+
+// InPlaceRemovalError is CON-023's refusal, naming the declared history mode.
+type InPlaceRemovalError struct {
+	Mode Mode
+}
+
+func (e *InPlaceRemovalError) Error() string {
+	return "history: in-place content removal refused; document declares " + ModeName(e.Mode) + " (CON-023)"
+}
+
+func (e *InPlaceRemovalError) Unwrap() error { return ErrInPlaceRemovalRefused }
+
+// CheckInPlaceRemoval enforces CON-023: IF an in-place content removal is
+// attempted on a document declaring complete history, it is refused, naming
+// the declared mode. Under retained-from-point or no-history the operation is
+// permitted here (their own retention rules apply elsewhere); only complete
+// history categorically forbids destroying past content in place.
+func (d Declaration) CheckInPlaceRemoval() error {
+	if d.mode == ModeComplete {
+		return &InPlaceRemovalError{Mode: d.mode}
+	}
+	return nil
+}
+
 // CheckImmutable enforces CON-022's immutability: redeclaring the SAME mode is
 // a no-op (idempotent), but declaring a DIFFERENT mode is refused, naming the
 // already-declared mode. This models the "immutable after creation" rule as a
