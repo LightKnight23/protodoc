@@ -11,8 +11,34 @@ import (
 	"errors"
 	"fmt"
 
+	"Protodoc/pkg/ceilings"
 	"Protodoc/pkg/pdlfmt"
 )
+
+// maxDecodedUnitCeilingName is the ceiling-table entry bounding a decoded
+// unit's octet length; ae-der-octets, as the opaque payload of a decoded
+// ATTESTATION_EVIDENCE unit, is bounded by it (NFR-030).
+const maxDecodedUnitCeilingName = "MAX_DECODED_UNIT"
+
+// ErrAeDEROctetsOversized is returned when ae-der-octets exceeds the
+// MAX_DECODED_UNIT ceiling.
+var ErrAeDEROctetsOversized = errors.New("integrity: ae-der-octets exceeds the MAX_DECODED_UNIT ceiling")
+
+// MaxAeDEROctets returns the ae-der-octets octet ceiling from the ceiling
+// table (MAX_DECODED_UNIT), the single source of truth checked against spec
+// text by pkg/ceilings' own CI equality test.
+func MaxAeDEROctets() uint64 { return ceilings.MustMax(maxDecodedUnitCeilingName) }
+
+// CheckAeDEROctetsCeiling reports whether a proposed ae-der-octets length is
+// within the MAX_DECODED_UNIT ceiling. It is the FR-106 abort-before-
+// allocation guard: a caller checks the declared length before materialising
+// it, and it names the ceiling and observed value when exceeded.
+func CheckAeDEROctetsCeiling(derLen uint64) error {
+	if derLen > MaxAeDEROctets() {
+		return fmt.Errorf("%w: %d octets exceeds %s = %d", ErrAeDEROctetsOversized, derLen, maxDecodedUnitCeilingName, MaxAeDEROctets())
+	}
+	return nil
+}
 
 // ATTESTATION_EVIDENCE discriminant + TLV tags (integrity.abnf S9).
 const (
