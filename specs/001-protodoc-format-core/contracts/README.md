@@ -277,7 +277,10 @@ harness rather than an ABNF parser generator. The following is the intended CI s
    in `document.abnf` and `integrity.abnf`, and each prefix region defined in `container.abnf`, gets an
    at-limit and an over-limit fixture (CON-010), hand- or property-test-generated to match this grammar
    exactly; both reference implementations (CP-003, CQ-012) must produce identical accept/reject verdicts
-   and, where applicable, identical canonical octets on every fixture.
+   and, where applicable, identical canonical octets on every fixture. The **migration** golden corpus
+   (`pkg/migrate/testdata/migration/`, FR-119/CP-003/NFR-028) is the migrate-specific instance of this
+   set: `(source, target-major)` pairs with expected canonical migrated octets, reusable by an
+   independent implementation; it feeds M19's two-implementation gate but does not itself run it.
 3. **Negative corpus per NORMATIVE reject rule.** Every `rule_id` named in these files (`PD-VARINT-001`,
    `PD-TLV-001`, `PD-SORT-001`, `PD-RING-001`, `PD-DISC-001`, `PD-COVER-001` through `004`, `PD-EXT-002`,
    `PD-BOUNDARY-001`, `PD-NFC-001`/`002`, `PD-INDEX-001`, `PD-SEGTYPE-001`, `PD-CAPPAIR-001`,
