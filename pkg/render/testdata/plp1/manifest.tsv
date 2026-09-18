@@ -6,8 +6,8 @@ two_block_dc_dpcm_16x8	valid	16	8	0
 bad_magic	invalid	1	1	0	bad-magic
 bad_version	invalid	1	1	0	bad-version
 zero_width	invalid	0	1	0	zero-dimension
-oversize_dim	invalid	4097	1	0	dimension-over-max
+oversize_dim	invalid	16385	1	0	dimension-over-max
 bad_matrix_index	invalid	8	8	8	bad-matrix-index
 truncated_header	invalid	0	0	0	truncated-header
 truncated_block_stream	invalid	8	8	0	truncated-block-stream
-over_ceiling_dim	invalid	4096	4096	0	decoded-unit-over-ceiling
+over_ceiling_dim	invalid	16384	16384	0	decoded-unit-over-ceiling

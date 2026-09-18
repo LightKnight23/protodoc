@@ -26,7 +26,7 @@ ac-coeff        = svarint                           ; signed minimal varint, zig
 ```
 
 Ceilings:
-- PLP1_MAX_DIM = 4096 (per-axis pixel cap).
+- PLP1_MAX_DIM = 16384 (per-axis pixel cap; set so a max-square raster exceeds MAX_DECODED_UNIT).
 - Decoded raster octets = width*height*3; MUST be bounded against MAX_DECODED_UNIT BEFORE allocation.
 - PLP-1 block size fixed 8x8; padding is edge-replicate to a multiple of 8 (data-model.md 690).
 
