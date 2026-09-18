@@ -113,6 +113,28 @@ func (s *RedactableSubtree) Remove() error {
 // erased, only the bare commitment retained).
 func (s RedactableSubtree) Removed() bool { return s.removed }
 
+// RedactRecord converts a redactable ContentRecord into its redacted form: it
+// computes the retained commitment leaf (the redactable-leaf digest over the
+// live salt+frame), then returns a record with Redacted set, the retained leaf
+// carried, and the frame and salt cleared. The redacted record's leaf digest
+// equals the pre-redaction redactable-leaf digest, so the T_C root -- and thus
+// any signature over it -- is PRESERVED across redaction (FR-076). It errors
+// if the record was not designated redactable.
+func RedactRecord(rec ContentRecord) (ContentRecord, error) {
+	if !rec.Redactable {
+		return ContentRecord{}, ErrNotDesignated
+	}
+	retained := TCLeafRedactable(rec.Salt, rec.Frame)
+	return ContentRecord{
+		UnitID:       rec.UnitID,
+		Redactable:   true,
+		Redacted:     true,
+		RetainedLeaf: retained,
+		// Frame and Salt deliberately left zero: the act of redaction removes
+		// both from the redacted document.
+	}, nil
+}
+
 // zeroSalt is the all-zero salt, used to prove the salt is gone after removal.
 var zeroSalt [SaltSize]byte
 

@@ -32,6 +32,15 @@ type ContentRecord struct {
 	// Salt is the 32-octet per-subtree CSPRNG salt used when Redactable is
 	// true (integrity.abnf S2.2 tc-salt); ignored for non-redactable records.
 	Salt [SaltSize]byte
+	// Redacted marks a redactable record whose frame and salt have been
+	// removed (the act of redaction); its leaf is then the RetainedLeaf
+	// commitment digest, so the T_C root is preserved across redaction
+	// (FR-076). Only a Redactable record may be Redacted.
+	Redacted bool
+	// RetainedLeaf is the bare 32-octet commitment digest retained after
+	// redaction (the redactable leaf's hash output, salt and frame gone). It
+	// is the leaf digest used when Redacted is true.
+	RetainedLeaf Digest
 }
 
 // OrderRecords returns records in T_C subtree ordinal order: ascending

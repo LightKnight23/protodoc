@@ -45,6 +45,12 @@ func tcInternalNode(children [TCArity]Digest) Digest {
 // leafDigest computes the leaf digest for one record: redactable (0x02 with
 // salt) or non-redactable (0x07) per its designation.
 func leafDigest(rec ContentRecord) Digest {
+	if rec.Redacted {
+		// A redacted redactable record's leaf is its retained commitment
+		// digest (frame and salt gone); this equals the pre-redaction
+		// redactable-leaf digest, so the T_C root is preserved (FR-076).
+		return rec.RetainedLeaf
+	}
 	if rec.Redactable {
 		return TCLeafRedactable(rec.Salt, rec.Frame)
 	}
