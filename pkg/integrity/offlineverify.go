@@ -173,6 +173,56 @@ func VerifyRevocationEvidenceParsesOffline(ev AttestationEvidence) error {
 	return nil
 }
 
+// ErrTimeAttestationNested is returned when a time-attestation's mandatory
+// nested credential-chain or revocation reference is absent or does not
+// resolve.
+var ErrTimeAttestationNested = errors.New("integrity: time-attestation nested credential-chain/revocation missing or unresolved")
+
+// VerifyTimeAttestationOffline verifies a time-attestation ATTESTATION_EVIDENCE
+// (ae-kind=2, TimeStampToken) OFFLINE, including the attesting authority's OWN
+// nested credential chain and revocation evidence (FR-071): both must be
+// present (non-zero16), resolve, and themselves verify offline -- the TSA's
+// signature is checkable exactly as strictly as the primary signatory's,
+// decades hence, with no network. The RFC 3161 token's own DER stays opaque
+// (this package does not reimplement RFC 3161); the offline verification here
+// covers the structural pairing/nesting rules and the nested cred-chain/
+// revocation offline verification. It returns whether the nested chain is
+// trusted, or an error for a structurally invalid attestation.
+func VerifyTimeAttestationOffline(ev AttestationEvidence, opt OfflineVerifyOptions, resolve EvidenceResolver) (bool, error) {
+	if ev.Kind != AeTimeAttestation || ev.Format != AeFormatTimestamp {
+		return false, fmt.Errorf("%w: not a time-attestation/TimeStampToken evidence", ErrAeKindFormatPairing)
+	}
+	if err := ev.ValidateNestedRefs(); err != nil {
+		return false, err
+	}
+	if len(ev.DEROctets) == 0 {
+		return false, errors.New("integrity: time-attestation carries empty DER octets")
+	}
+	if n, err := derSequenceLen(ev.DEROctets); err != nil || n != len(ev.DEROctets) {
+		return false, fmt.Errorf("integrity: time-attestation DER framing: %v", err)
+	}
+
+	// The TSA's own nested credential chain must resolve and verify offline.
+	credEv, ok := resolve(ev.NestedCredChain)
+	if !ok {
+		return false, fmt.Errorf("%w: nested credential-chain", ErrTimeAttestationNested)
+	}
+	trusted, err := VerifyCredentialChainOffline(credEv, opt)
+	if err != nil {
+		return false, err
+	}
+
+	// The TSA's own nested revocation evidence must resolve and parse offline.
+	revEv, ok := resolve(ev.NestedRevocation)
+	if !ok {
+		return false, fmt.Errorf("%w: nested revocation", ErrTimeAttestationNested)
+	}
+	if err := VerifyRevocationEvidenceParsesOffline(revEv); err != nil {
+		return false, err
+	}
+	return trusted, nil
+}
+
 // VerifyCredentialChainOffline verifies a credential-chain ATTESTATION_EVIDENCE
 // (ae-kind=0, ae-format=X.509 chain) OFFLINE against a fixed local trust-anchor
 // list at the attested time. It parses the concatenated leaf-to-root DER
