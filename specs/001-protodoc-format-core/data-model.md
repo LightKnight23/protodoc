@@ -704,6 +704,28 @@ Invariants:
    label not derivable from its SEQUENCE_DEFINITION and order-value is a structural reject (validator rule
    PD-A11Y-004, T-0287).
 
+### 2.31 Inferred-marker on inferrable fields (FR-118)
+
+Purpose: some mandated fields MAY be system-inferred rather than authored (an inferred alt-text, an
+inferred base direction, a derived numbering label, a rendered cross-reference text). Each such field
+carries an inferred-marker flag plus a basis-of-inference reference, so a reader distinguishes an authored
+value from a machine-inferred one and can audit the basis. Added per the T-0267 ruling (clarify-002.md,
+OPEN — provisional).
+
+Closed inferrable-field enumeration: `alt_text` (FR-040), `direction` (FR-032), `numbering_label` (FR-083),
+`cross_reference_text` (FR-084).
+
+| Field | Type | Required | Constraint | Notes |
+|---|---|---|---|---|
+| inferred | `uint8` | yes (on every inferrable field) | closed `{0 = authored, 1 = inferred}` | whether the value was system-inferred |
+| basis | `uint8` | yes | closed `{0 none, 1 heuristic, 2 model, 3 derivation}` | HOW it was inferred; `0` iff `inferred = 0` |
+
+Invariants:
+1. The inferred-marker + basis pair is present whenever a value in an inferrable field was not explicitly
+   authored, and the marker records `inferred = 1` with a non-none basis (validator rule PD-INFER-001,
+   T-0293).
+2. For an authored value the marker records `inferred = 0` and `basis = none` (PD-INFER-001).
+
 ## 3. Relationships
 
 ```
