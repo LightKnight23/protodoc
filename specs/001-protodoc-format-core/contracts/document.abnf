@@ -415,7 +415,7 @@ ext-position-key    = field                         ; tag=7; field-value = ancho
 ; ============================================================================
 
 ; ---- 7.1 RASTER_IMAGE ------------------------------------------------------
-raster-image        = ri-discriminant ri-codec ri-width ri-height ri-pixel-octets
+raster-image        = ri-discriminant ri-codec ri-width ri-height ri-pixel-octets ri-decorative ri-alttext
 ri-discriminant     = %x07                          ; tag=0
 ri-codec            = field                         ; tag=1; field-value = u8: 0x00 = restricted-PNG profile (lossless,
                                                      ; CQ-010 option A's lossless leg), 0x01 = PLP-1 (lossy, bit-exact
@@ -449,6 +449,15 @@ ri-pixel-octets     = field                         ; tag=4; field-value = the e
                                                      ; (block layout, the 8 matrices, the Huffman tables, the IDCT
                                                      ; shift schedule) belongs in a dedicated PLP-1 codec specification,
                                                      ; to be produced and vector-tested before phase 6 implementation.
+ri-decorative       = field                         ; tag=5; field-value = u8: 0x00 = non-decorative (content-bearing,
+                                                     ; MUST carry a meaningful ri-alttext), 0x01 = purely decorative
+                                                     ; (AT skips it, ri-alttext MUST be empty); 0x02-0xFF reserved.
+                                                     ; Provisional per T-0267 (clarify-002.md, OPEN).
+ri-alttext          = field                         ; tag=6; field-value = nfc-string, the text alternative (FR-040).
+                                                     ; NORMATIVE (PD-A11Y-003, T-0285): for a non-decorative image
+                                                     ; (ri-decorative=0x00) this MUST be non-empty and MUST NOT merely
+                                                     ; echo the image's filename, digest or dimensions; for a decorative
+                                                     ; image (0x01) it MUST be empty. Provisional per T-0267.
 
 ; ---- 7.2 FONT_SUBSET --------------------------------------------------------
 font-subset         = fs-discriminant fs-font-octets

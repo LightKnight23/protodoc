@@ -653,6 +653,25 @@ Closed role enum: `PROSE`, `ANNOTATION`, `TABLE`, `NOTE`, `REFERENCE`, `GRAPHIC`
 | ERASURE_RECORD (0x0D) | NON_SEMANTIC |
 | ROOT_SEQUENCE (0x0E) | STRUCTURAL_NAVIGATION |
 
+### 2.29 Embedded-object text alternative (FR-040)
+
+Purpose: every non-decorative embedded object (a content-bearing RASTER_IMAGE, and any future embedded
+object that conveys meaning visually) MUST carry a meaningful text alternative so assistive technology can
+convey it. Added per the T-0267 ruling (clarify-002.md, OPEN — provisional). Mirrors document.abnf S7's
+`ri-decorative` / `ri-alttext` fields.
+
+| Field | Type | Required | Constraint | Notes |
+|---|---|---|---|---|
+| decorative | `uint8` | yes | closed `{0 = non-decorative, 1 = decorative}` | whether the object conveys meaning (FR-040) |
+| alt_text | `nfc-string` | yes | non-empty iff non-decorative; empty iff decorative | the text alternative (FR-040) |
+
+Invariants:
+1. A non-decorative object (`decorative = 0`) MUST carry a non-empty `alt_text` that does NOT merely echo the
+   object's filename, content digest, or pixel dimensions (validator rule PD-A11Y-003, T-0285).
+2. A decorative object (`decorative = 1`) MUST carry an empty `alt_text`; assistive technology skips it.
+3. FONT_SUBSET and other non-content resource records (fonts, registry excerpts, index leaves) are not
+   content-bearing embedded objects and carry no text alternative; they map to the NON_SEMANTIC role (2.28).
+
 Invariants:
 1. The map is TOTAL over the assigned construct kinds: every discriminant 0x01–0x0E maps to exactly one
    role. A construct kind absent from this table (a reserved or future discriminant) has NO role and fails
