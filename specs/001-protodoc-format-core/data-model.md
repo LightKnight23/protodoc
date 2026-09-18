@@ -588,6 +588,32 @@ Identity: `xref_id` (content-unit identity).
 
 Limits: none beyond `MAX_CONTENT_UNITS` and `MAX_REFERENCES`.
 
+### 2.27 ROOT_SEQUENCE (authored reading-order record)
+
+Purpose: the document's AUTHORITATIVE logical top-to-bottom reading order over its content units (FR-036).
+Added per the T-0267 ruling (clarify-002.md, OPEN — provisional). It resolves the self-disclosed absences that
+`integrity.abnf` S2.2.1 flagged for T_C's own subtree traversal and the `plan.md` Section 3 extraction
+storage-order / reading-order inconsistency: reading order is an authored property, never inferred from
+coordinates or storage/append order.
+
+| Field | Type | Required | Constraint | Notes |
+|---|---|---|---|---|
+| rs_id | unit-id | yes | singleton per document | the ROOT_SEQUENCE record's own identity |
+| rs_order | `[]unit-id` | yes | one entry per content unit; no duplicates, no omissions | the authored reading order, in top-to-bottom order |
+
+Invariants:
+1. `rs_order` lists EVERY content unit in the document EXACTLY ONCE — no duplicates, no omissions (validator rule
+   PD-A11Y-001; T-0274). A unit absent from `rs_order`, or listed twice, is a structural reject naming the unit id.
+2. `rs_order` is the authoritative reading order and is INDEPENDENT of storage/append order: a unit inserted
+   logically mid-document (and therefore appended at the end of storage) still appears at its authored position
+   in `rs_order`.
+3. T_C subtree traversal (integrity.abnf S2.2.1) and the `extract` walk both key on `rs_order`, not storage order
+   or a CSPRNG placeholder (T-0275, T-0276).
+
+Identity: `rs_id` (singleton content-unit identity per document).
+
+Limits: `rs_order` count is bounded by `MAX_CONTENT_UNITS`.
+
 ## 3. Relationships
 
 ```
