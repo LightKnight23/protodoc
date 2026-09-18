@@ -89,9 +89,8 @@ FR-118, FR-124, NFR-002,
 NFR-025, NFR-031,
 TR-001
 
-### Rule ids with zero conformance cases (13)
+### Rule ids with zero conformance cases (12)
 
-PD-2D-001,
 PD-DISC-001, PD-DUP-001, PD-EXT-001,
 PD-FONT-001, PD-INDEX-001, PD-INFER-001, PD-MODE-001, PD-NFC-001, PD-NFC-002,
 PD-NORM-001, PD-PREV-001, PD-SEGTYPE-001
