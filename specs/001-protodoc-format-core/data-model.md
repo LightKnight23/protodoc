@@ -653,6 +653,13 @@ Closed role enum: `PROSE`, `ANNOTATION`, `TABLE`, `NOTE`, `REFERENCE`, `GRAPHIC`
 | ERASURE_RECORD (0x0D) | NON_SEMANTIC |
 | ROOT_SEQUENCE (0x0E) | STRUCTURAL_NAVIGATION |
 
+Invariants:
+1. The map is TOTAL over the assigned construct kinds: every discriminant 0x01–0x0E maps to exactly one
+   role. A construct kind absent from this table (a reserved or future discriminant) has NO role and fails
+   closed under PD-A11Y-002.
+2. The map is SINGLE-VALUED: no construct kind maps to more than one role.
+3. The role enum is CLOSED for v1: a new role requires a spec amendment, not a document-level extension.
+
 ### 2.29 Embedded-object text alternative (FR-040)
 
 Purpose: every non-decorative embedded object (a content-bearing RASTER_IMAGE, and any future embedded
@@ -672,12 +679,30 @@ Invariants:
 3. FONT_SUBSET and other non-content resource records (fonts, registry excerpts, index leaves) are not
    content-bearing embedded objects and carry no text alternative; they map to the NON_SEMANTIC role (2.28).
 
+### 2.30 SEQUENCE_DEFINITION and ordered-item numbering (FR-083)
+
+Purpose: numbering labels (list markers, figure/section numbers) are DERIVED, never persisted as
+authoritative literals. A SEQUENCE_DEFINITION names a numbering style and start value; each ordered item
+carries only an order-value. The rendered label is a pure deterministic function of (order-value, sequence
+definition, ROOT_SEQUENCE position), materialised as a COMPUTED_INLINE (2.27 / FR-034). Added per the
+T-0267 ruling (clarify-002.md, OPEN — provisional).
+
+| Field | Type | Required | Constraint | Notes |
+|---|---|---|---|---|
+| def_id | unit-id | yes | | the SEQUENCE_DEFINITION's own identity |
+| style | `uint8` | yes | closed `{0 decimal, 1 lower-alpha, 2 upper-alpha, 3 lower-roman, 4 upper-roman}` | numbering style |
+| start | `int` | yes | | the first item's 1-based number |
+| prefix / suffix | `nfc-string` | no | | affixes around the derived numeral |
+
+Ordered item: `(item_id, def_id, order_value)` — `def_id` resolves to a SEQUENCE_DEFINITION; `order_value`
+is the item's 0-based ordinal within the sequence.
+
 Invariants:
-1. The map is TOTAL over the assigned construct kinds: every discriminant 0x01–0x0E maps to exactly one
-   role. A construct kind absent from this table (a reserved or future discriminant) has NO role and fails
-   closed under PD-A11Y-002.
-2. The map is SINGLE-VALUED: no construct kind maps to more than one role.
-3. The role enum is CLOSED for v1: a new role requires a spec amendment, not a document-level extension.
+1. A rendered numbering label is a pure deterministic function of `(order_value, referenced SEQUENCE_
+   DEFINITION, ROOT_SEQUENCE position)`; two conforming implementations derive identical labels (FR-083).
+2. No persisted literal numbering label is ever authoritative. An ordered item carrying a persisted literal
+   label not derivable from its SEQUENCE_DEFINITION and order-value is a structural reject (validator rule
+   PD-A11Y-004, T-0287).
 
 ## 3. Relationships
 
