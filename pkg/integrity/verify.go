@@ -56,6 +56,33 @@ type AttestationReport struct {
 	Verdict             Verdict         // valid / unverified / unavailable_state / unattested
 	Signer              *SignerIdentity // non-nil ONLY when Verdict == Valid
 	CurrentStateMatches bool            // whether the current state equals the signed state
+	// DeclaredOmissions lists every redactable subtree the signature
+	// designated that has since been redacted (a DECLARED omission). When the
+	// verdict is Valid and this list is non-empty, the reported outcome is
+	// "attested-with-declared-omissions" (FR-076): the signature still
+	// verifies (the T_C root is preserved across a declared redaction) and
+	// every omission is enumerated. An UNDECLARED omission (FR-077) yields
+	// Unverified and never populates this list.
+	DeclaredOmissions []UnitID
+}
+
+// OutcomeAttestedWithDeclaredOmissions is the reported outcome string when a
+// valid signature has designated omissions (FR-076, spec.md).
+const OutcomeAttestedWithDeclaredOmissions = "attested-with-declared-omissions"
+
+// ReportedOutcome returns the human outcome for a report: a Valid verdict with
+// one or more declared omissions reports "attested-with-declared-omissions"
+// (FR-076); otherwise the verdict's own name. This distinct outcome is a
+// Valid-family outcome (the signature verifies) carried as Valid + a non-empty
+// omission list rather than a fifth verdict enum member -- the closed verdict
+// set stays four, with cli.md S5's per-signature verdict field
+// (valid/unverified/unavailable_state) plus a separate declared_omissions
+// array.
+func (r AttestationReport) ReportedOutcome() string {
+	if r.Verdict == VerdictValid && len(r.DeclaredOmissions) > 0 {
+		return OutcomeAttestedWithDeclaredOmissions
+	}
+	return r.Verdict.String()
 }
 
 // VerifyInput carries what a reader observes about the CURRENT file to verify
