@@ -82,10 +82,9 @@ choose between.
 
 ## Full gap list
 
-### Requirement ids with zero conformance cases (12)
+### Requirement ids with zero conformance cases (11)
 
 CON-016,
-FR-038,
 FR-039, FR-040,
 FR-083, FR-099,
 FR-118, FR-124, NFR-002,

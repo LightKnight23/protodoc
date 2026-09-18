@@ -614,6 +614,41 @@ Identity: `rs_id` (singleton content-unit identity per document).
 
 Limits: `rs_order` count is bounded by `MAX_CONTENT_UNITS`.
 
+### 2.28 Accessibility role map (FR-038)
+
+Purpose: a CLOSED set of accessibility roles and a TOTAL, SINGLE-VALUED map from every construct kind
+defined in `document.abnf`'s frame-discriminant registry (0x01–0x0E) onto exactly one role. Assistive
+technology consumes the role, not the raw discriminant. Added per the T-0267 ruling (clarify-002.md,
+OPEN — provisional). Validator rule PD-A11Y-002 (T-0280) fails closed on any construct instance that does
+not resolve to exactly one role from this table.
+
+Closed role enum: `PROSE`, `ANNOTATION`, `TABLE`, `NOTE`, `REFERENCE`, `GRAPHIC`, `STRUCTURAL_NAVIGATION`,
+`NON_SEMANTIC`.
+
+| Construct kind (discriminant) | Accessibility role |
+|---|---|
+| TEXT_BLOCK (0x01) | PROSE |
+| ANNOTATION (0x02) | ANNOTATION |
+| TABLE (0x03) | TABLE |
+| NOTE (0x04) | NOTE |
+| CROSS_REFERENCE (0x05) | REFERENCE |
+| EXT_ENVELOPE (0x06) | NON_SEMANTIC |
+| RASTER_IMAGE (0x07) | GRAPHIC |
+| FONT_SUBSET (0x08) | NON_SEMANTIC |
+| REGISTRY_EXCERPT (0x09) | NON_SEMANTIC |
+| UNIT_INDEX_LEAF (0x0A) | NON_SEMANTIC |
+| HISTORY_OP_BATCH (0x0B) | NON_SEMANTIC |
+| PRESENTATION_ARTEFACT (0x0C) | NON_SEMANTIC |
+| ERASURE_RECORD (0x0D) | NON_SEMANTIC |
+| ROOT_SEQUENCE (0x0E) | STRUCTURAL_NAVIGATION |
+
+Invariants:
+1. The map is TOTAL over the assigned construct kinds: every discriminant 0x01–0x0E maps to exactly one
+   role. A construct kind absent from this table (a reserved or future discriminant) has NO role and fails
+   closed under PD-A11Y-002.
+2. The map is SINGLE-VALUED: no construct kind maps to more than one role.
+3. The role enum is CLOSED for v1: a new role requires a spec amendment, not a document-level extension.
+
 ## 3. Relationships
 
 ```
