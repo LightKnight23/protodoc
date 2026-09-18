@@ -113,7 +113,7 @@ func notImplemented(verb string) RunFunc {
 var verbs = []Verb{
 	{Name: "validate", Usage: "protodoc validate <file>", Run: runValidate},
 	{Name: "inspect", Usage: "protodoc inspect <file>", Run: runInspect},
-	{Name: "extract", Usage: "protodoc extract <file> [--to <path>] [--locators]", Run: notImplemented("extract")},
+	{Name: "extract", Usage: "protodoc extract <file> [--to <path>] [--locators]", Run: runExtract},
 	{Name: "verify", Usage: "protodoc verify <file> [--signature <id>] [--offline]", Run: notImplemented("verify")},
 	{Name: "diff", Usage: "protodoc diff <fileA> <fileB> [--format=json|text]", Run: notImplemented("diff")},
 	{Name: "merge", Usage: "protodoc merge <base> <a> <b> --out <path>", Run: notImplemented("merge")},
