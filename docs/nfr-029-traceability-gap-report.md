@@ -86,11 +86,9 @@ choose between.
 
 _(none — every normative requirement now has at least one conformance case)_
 
-### Rule ids with zero conformance cases (11)
+### Rule ids with zero conformance cases (0)
 
-PD-DISC-001, PD-DUP-001, PD-EXT-001,
-PD-FONT-001, PD-INDEX-001, PD-MODE-001, PD-NFC-001, PD-NFC-002,
-PD-NORM-001, PD-PREV-001, PD-SEGTYPE-001
+_(none — every spec-named PD-* validator rule now has at least one conformance case)_
 
 ## Release-gate mechanism
 
