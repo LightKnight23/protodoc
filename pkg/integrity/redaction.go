@@ -113,6 +113,45 @@ func (s *RedactableSubtree) Remove() error {
 // erased, only the bare commitment retained).
 func (s RedactableSubtree) Removed() bool { return s.removed }
 
+// UndesignatedOmission reports whether the current record set omits content
+// that was present and NOT designated redactable at signing time (FR-077). A
+// signed document may lawfully omit only its DESIGNATED redactable subtrees
+// (which are redacted in place, preserving the T_C root); omitting anything
+// else -- a non-redactable record, or a redactable record removed without
+// leaving its retained commitment -- changes the T_C root and is an
+// UNDESIGNATED omission. signedUnits is the set of unit-ids present at signing;
+// current is the record set now. Returns the unit-ids omitted without
+// designation (empty if every omission was a declared redaction).
+func UndesignatedOmission(signedUnits map[UnitID]bool, signedRedactable map[UnitID]bool, current []ContentRecord) []UnitID {
+	present := make(map[UnitID]bool, len(current))
+	for _, r := range current {
+		// A redacted record is still "present" as its retained commitment
+		// leaf (a declared omission), so it does not count as omitted.
+		present[r.UnitID] = true
+	}
+	var undesignated []UnitID
+	for id := range signedUnits {
+		if !present[id] && !signedRedactable[id] {
+			// Missing entirely AND not designated redactable at signing.
+			undesignated = append(undesignated, id)
+		}
+	}
+	return undesignated
+}
+
+// UndesignatedOmissionVerdict returns VerdictUnverified when the current record
+// set contains an undesignated omission relative to the signed state (FR-077),
+// or VerdictValid when every omission was a declared redaction. An undeclared
+// omission changes the T_C root, so the signature cannot verify -- the reader
+// must present the document as unverified, never valid or
+// attested-with-declared-omissions.
+func UndesignatedOmissionVerdict(signedUnits, signedRedactable map[UnitID]bool, current []ContentRecord) Verdict {
+	if len(UndesignatedOmission(signedUnits, signedRedactable, current)) > 0 {
+		return VerdictUnverified
+	}
+	return VerdictValid
+}
+
 // RedactRecord converts a redactable ContentRecord into its redacted form: it
 // computes the retained commitment leaf (the redactable-leaf digest over the
 // live salt+frame), then returns a record with Redacted set, the retained leaf
