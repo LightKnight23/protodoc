@@ -15,6 +15,31 @@ import (
 	"Protodoc/pkg/pdlfmt"
 )
 
+// SigIntent is sig-intent (integrity.abnf S10.3): the closed signing-intent
+// set. A v1 reader MUST reject a value outside 0x00-0x03.
+type SigIntent uint8
+
+const (
+	IntentAuthorApproval     SigIntent = 0x00 // author signing their own work
+	IntentWitnessAttestation SigIntent = 0x01 // witnessed the document's execution
+	IntentNotarization       SigIntent = 0x02 // identity verification, not content approval
+	IntentCustodialTransfer  SigIntent = 0x03 // custody continuity (RESCIND_RESIGN's new signature)
+)
+
+// ErrSigIntentOutOfRange is returned for a sig-intent outside the closed set
+// {0x00..0x03}.
+var ErrSigIntentOutOfRange = errors.New("integrity: sig-intent outside the closed set {author-approval, witness-attestation, notarization, custodial-transfer}")
+
+// ValidateSigIntent enforces the closed sig-intent set (S10.3): 0x00-0x03 are
+// the four defined intents; 0x04-0xFF are reserved and rejected, never
+// defaulted (non-negotiable #8: a closed enum rejects rather than defaults).
+func ValidateSigIntent(intent SigIntent) error {
+	if intent > IntentCustodialTransfer {
+		return fmt.Errorf("%w: got 0x%02x", ErrSigIntentOutOfRange, uint8(intent))
+	}
+	return nil
+}
+
 // SIGNATURE discriminant (integrity.abnf S5) and TLV tags.
 const (
 	signatureDiscriminant = 0x40
