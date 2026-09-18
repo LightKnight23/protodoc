@@ -8,10 +8,11 @@
 // token independent of both -- and is fully deterministic and reproducible.
 // It does NOT satisfy the aspirational POSITIVE requirement ("fixed by the
 // document's logical/reading-order structure"): a CSPRNG-ordered traversal
-// carries no relationship to reading order. This is deliberately NOT
-// "fixed" here by inventing a reading-order traversal: the proper fix is an
-// additive ROOT_SEQUENCE record and a genuine pre-order walk, future work
-// out of this task's scope. Do not replace this interim rule silently.
+// carries no relationship to reading order. The proper fix — an additive
+// ROOT_SEQUENCE record and a genuine reading-order traversal — now exists as
+// OrderRecordsBySequence / TCRootWithSequence (FR-036, T-0275). OrderRecords
+// is retained as the deterministic fallback used when no ROOT_SEQUENCE is
+// present; callers that have a ROOT_SEQUENCE MUST key the traversal on it.
 package integrity
 
 import (
@@ -54,6 +55,45 @@ func OrderRecords(records []ContentRecord) []ContentRecord {
 	copy(out, records)
 	sort.SliceStable(out, func(i, j int) bool {
 		return bytes.Compare(out[i].UnitID[:], out[j].UnitID[:]) < 0
+	})
+	return out
+}
+
+// OrderRecordsBySequence returns records in T_C subtree ordinal order keyed on
+// the document's authored ROOT_SEQUENCE reading order (FR-036, T-0275),
+// replacing the FLAGGED CSPRNG-ordered interim rule of OrderRecords. The
+// subtree ordinal of each record is its unit-id's position in `order` (the
+// rs-order list of the ROOT_SEQUENCE record, document.abnf S5.1). Because the
+// traversal now derives purely from ROOT_SEQUENCE, the T_C root changes when —
+// and only when — ROOT_SEQUENCE changes: a mere permutation of storage order
+// leaves both the ordering and the root unchanged, whereas reordering
+// rs-order re-keys the traversal and so changes the root.
+//
+// It returns a new slice; the input is not mutated. A record whose unit-id is
+// absent from `order` sorts after all sequenced records, keyed by ascending
+// byte-lexicographic unit-id, so the function is total and deterministic even
+// on an incomplete sequence (completeness itself is enforced separately by
+// semantics.PD-A11Y-005 / T-0274).
+func OrderRecordsBySequence(records []ContentRecord, order []pdlfmt.UnitID) []ContentRecord {
+	pos := make(map[pdlfmt.UnitID]int, len(order))
+	for i, u := range order {
+		if _, dup := pos[u]; !dup {
+			pos[u] = i
+		}
+	}
+	out := make([]ContentRecord, len(records))
+	copy(out, records)
+	sort.SliceStable(out, func(i, j int) bool {
+		pi, iok := pos[out[i].UnitID]
+		pj, jok := pos[out[j].UnitID]
+		switch {
+		case iok && jok:
+			return pi < pj
+		case iok != jok:
+			return iok // sequenced records sort before unsequenced ones
+		default:
+			return bytes.Compare(out[i].UnitID[:], out[j].UnitID[:]) < 0
+		}
 	})
 	return out
 }

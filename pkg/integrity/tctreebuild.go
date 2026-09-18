@@ -10,6 +10,8 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+
+	"Protodoc/pkg/pdlfmt"
 )
 
 // T_C fixed-shape constants (integrity.abnf S2.2).
@@ -80,12 +82,16 @@ func tcDepthFor(n int) (int, int, error) {
 // all records; every absent leaf/child position at every level is
 // ABSENT_CHILD_DIGEST.
 func buildTCTree(records []ContentRecord) (Digest, error) {
-	depth, capacity, err := tcDepthFor(len(records))
+	return buildTCTreeOrdered(OrderRecords(records))
+}
+
+// buildTCTreeOrdered builds the fixed-arity T_C tree over an already-ordered
+// record slice and returns the root.
+func buildTCTreeOrdered(ordered []ContentRecord) (Digest, error) {
+	depth, capacity, err := tcDepthFor(len(ordered))
 	if err != nil {
 		return Digest{}, err
 	}
-
-	ordered := OrderRecords(records)
 
 	// Level 0: capacity leaves; present positions take the leaf digest,
 	// absent positions take ABSENT_CHILD_DIGEST.
@@ -126,4 +132,15 @@ func buildTCTree(records []ContentRecord) (Digest, error) {
 // record count exceeds the T_C capacity.
 func TCRoot(records []ContentRecord) (Digest, error) {
 	return buildTCTree(records)
+}
+
+// TCRootWithSequence returns the T_C root with the subtree traversal keyed on
+// the document's authored ROOT_SEQUENCE reading order (`order`, the rs-order
+// list) instead of the FLAGGED CSPRNG interim rule (FR-036, T-0275). Because
+// the ordering is a pure function of ROOT_SEQUENCE, the returned root changes
+// when — and only when — ROOT_SEQUENCE changes: permuting the storage order of
+// `records` yields the identical root, while reordering `order` yields a
+// different root. It errors only if the record count exceeds T_C capacity.
+func TCRootWithSequence(records []ContentRecord, order []pdlfmt.UnitID) (Digest, error) {
+	return buildTCTreeOrdered(OrderRecordsBySequence(records, order))
 }
