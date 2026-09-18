@@ -21,12 +21,13 @@ are structural guarantees, not aspirations. Full case: [`specs/001-protodoc-form
 
 ## Status
 
-**Implementation in progress: 47 of 372 tasks done, verified against git history.** All specs (phases 0-5) are
-approved and frozen. Phase 6 (implement) is underway: milestone M01 (core encoding, fixed prefix) is complete
-and green; M18/M19 have a handful of tasks done but were built ahead of their real prerequisites and likely need
-rework; everything else (M02-M17: the ledger, identity/anchoring, signing, integrity trees, redaction, merge,
-rendering) does not exist yet. See [`CLAUDE.md`](CLAUDE.md) § "Phase 6 status" for the exact, git-verified
-breakdown, the real build order, and the discipline for continuing safely — **read it before writing any code.**
+**Implementation nearly done: 363 of 372 tasks done, verified against git history.** All specs (phases 0-5) are
+approved and frozen. Phase 6 (implement): milestones M01 through M18 are complete (every task, `go build/vet/
+test ./...` green); M19 (Conformance, Fuzzing & Governance Convergence) has 11 of 20 tasks done. The 9 remaining
+M19 tasks are real-world actions no agent can complete by writing code — external-implementer trials, Eyvar's
+personal governance sign-offs, a funding decision, commissioning a second independent implementation, and an
+actual IANA registration filing. See [`CLAUDE.md`](CLAUDE.md) § "Phase 6 status" for the exact, git-verified
+breakdown and the discipline for continuing safely — **read it before writing any code.**
 
 | Artifact | What it is |
 |---|---|
@@ -62,8 +63,25 @@ specs/001-protodoc-format-core/   The full spec-to-tasks-to-analysis pipeline (s
 scripts/extract_milestone_tasks.py  Regenerates .impl_tasks/ (gitignored) from tasks.md
 pkg/pdlfmt/                       PDL-VARINT, PDL-TLV, and value-kind wire primitives — done (M01)
 pkg/container/                    Header, CommitRingRecord, Frontmatter, SegmentTableSlot — done (M01)
-pkg/cli/, pkg/governance/, pkg/traceability/, pkg/diffconform/, pkg/fuzzmaturity/, pkg/benchconfig/, pkg/ceilings/
-                                  Partial M18/M19 work, built ahead of its real prerequisites — needs review
+pkg/ledger/                       Ledger & Placement — done (M02)
+pkg/content/, pkg/content/mint/   Identity & Anchor — done (M04)
+pkg/extract/                      Extraction — done (M05)
+pkg/eddsa/                        Signature Primitive (EdDSA-Protodoc-1) — done (M06)
+pkg/integrity/                    Integrity Trees (T_S/T_C) — done (M08)
+pkg/validate/                     Structural Validation Core — done (M07)
+                                  Extensibility Envelope — done (M03)
+                                  Signature & Coverage — done (M09)
+                                  Attestation Evidence & LTV — done (M10)
+pkg/history/                      Redaction, History & Erasure — done (M11, M12)
+pkg/merge/                        Concurrent-Edit / Merge — done (M13)
+pkg/render/                       Rendering & Resource — done (M14)
+pkg/semantics/                    Accessibility & Semantic Content-Model Extensions — done (M15)
+pkg/migrate/, pkg/registry/       Evolution / Migration & Registry — done (M16)
+pkg/canon/                        Canonicalization — done (M17)
+pkg/cli/                          CLI Surface — done (M18)
+pkg/governance/, pkg/traceability/, pkg/diffconform/, pkg/fuzzmaturity/, pkg/benchconfig/, pkg/ceilings/
+                                  Conformance, Fuzzing & Governance Convergence — 11/20 (M19); remaining 9
+                                  tasks are real-world actions (external trials, sign-offs, IANA filing)
 cmd/                              CLI entry points for the packages above
 go.mod                            Go 1.25 module
 ```

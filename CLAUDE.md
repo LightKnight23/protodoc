@@ -42,7 +42,7 @@ code is its output.
 | 3 Plan | `specs/001-protodoc-format-core/plan.md`, `research.md`, `data-model.md`, `contracts/` | ✅ APPROVED — architecture "Protodoc Ledger (PDL)" |
 | 4 Tasks | `specs/001-protodoc-format-core/tasks.md` | ✅ APPROVED — 19 milestones, 372 tasks, 0 orphan requirements |
 | 5 Analyze | `specs/001-protodoc-format-core/analysis.md` | ✅ APPROVED — gate PASSES |
-| **6 Implement** | `pkg/`, `cmd/` | 🔶 **IN PROGRESS — 47/372 tasks done. Read the next section before touching code.** |
+| **6 Implement** | `pkg/`, `cmd/` | 🔶 **IN PROGRESS — 363/372 tasks done. Read the next section before touching code.** |
 | 7 Verify | test reports | ⬜ not started (this is a separate gate from "tests pass in CI," see below) |
 | 8 Converge / 9 Close | — | ⬜ |
 
@@ -55,49 +55,49 @@ git log --all --format="%H" | while read sha; do git show -s --format="%B" "$sha
   | grep -o "T-[0-9]\{4\}" | sort -u
 ```
 
-## Phase 6 status (verified against git history, 2026-09-16) — READ BEFORE WRITING ANY CODE
+## Phase 6 status (verified against git history, 2026-09-18) — READ BEFORE WRITING ANY CODE
 
-**47 of 372 tasks are actually done.** All of them are traceable to a real commit with a `Refs:` trailer;
-nothing here is inferred from a workflow's self-report (see the cautionary tale two paragraphs down).
+**363 of 372 tasks are actually done.** All of them are traceable to a real commit with a `Refs:` trailer;
+nothing here is inferred from a workflow's or agent's self-report. This work was carried from 47/372 to
+363/372 by a different tool (Kiro) after the Claude Code handoff — verified fresh against `git log`, not
+against any prior session's claim.
 
-- **M01 (Core Encoding & Fixed Prefix): all 33 tasks done** (T-0001..T-0032, T-0359). `go build ./... && go vet
-  ./... && go test ./...` is green. Packages: `pkg/pdlfmt` (PDL-VARINT, PDL-TLV, digest256/nfc-string/unit-id/
-  u48 value-kind helpers), `pkg/container` (Header, CommitRingRecord, Frontmatter, SegmentTableSlot, plus every
-  M01 audit/conformance task).
-- **M18 (CLI Surface): only 4 of 17 tasks done** (T-0325, T-0326, T-0329, T-0339 — dispatch framework, exit-code
-  engine, `inspect` verb, requirement-to-verb traceability table). 13 tasks remain: T-0327, T-0328, T-0330..338,
-  T-0340, T-0341.
-- **M19 (Conformance, Fuzzing & Governance): only 10 of 20 tasks done** (T-0342, T-0343, T-0348, T-0350, T-0352,
-  T-0353, T-0354, T-0355, T-0357, T-0372). 10 remain: T-0344, T-0345, T-0346, T-0347, T-0349, T-0351, T-0356,
-  T-0358, T-0365, T-0371 — several of which (T-0345/T-0346 external-implementer trials, T-0349 funding decision,
-  T-0351 commissioning a second implementation, T-0356/T-0358 Eyvar sign-offs, T-0371 an actual IANA filing)
-  genuinely cannot be completed by an agent writing code; see the honesty rule below.
-- **M02–M17 (everything else — Ledger, Extensibility Envelope, Identity & Anchor, Extraction, Signature
-  Primitive, Structural Validation, Integrity Trees, Signature & Coverage, Attestation/LTV, Redaction,
-  History & Erasure, Concurrent-Edit/Merge, Rendering, Accessibility, Migration/Registry, Canonicalization):
-  ZERO tasks done.** No packages exist for identity/anchoring, Ed25519 signing, the T_S/T_C integrity trees,
-  redaction, merge, or rendering. This is the actual reference-implementation work; almost none of it exists.
+- **M01–M18: fully done, every task.** M01 (Core Encoding & Fixed Prefix, 33/33), M02 (Ledger & Placement,
+  17/17), M04 (Identity & Anchor, 23/23), M05 (Extraction, 15/15), M06 (Signature Primitive, 11/11), M08
+  (Integrity Trees T_S/T_C, 17/17), M07 (Structural Validation Core, 20/20), M03 (Extensibility Envelope,
+  17/17), M09 (Signature & Coverage, 23/23), M10 (Attestation/LTV, 18/18), M11 (Redaction, 22/22), M12
+  (History & Erasure, 18/18), M13 (Concurrent-Edit/Merge, 18/18), M14 (Rendering & Resource, 25/25), M15
+  (Accessibility & Semantic Content-Model, 29/29), M16 (Migration & Registry, 11/11), M17 (Canonicalization,
+  18/18), M18 (CLI Surface, 17/17). `go build ./... && go vet ./... && go test ./...` is green across every
+  package: `pkg/pdlfmt`, `pkg/container`, `pkg/ledger`, `pkg/content`, `pkg/content/mint`, `pkg/eddsa`,
+  `pkg/integrity`, `pkg/validate`, `pkg/extract`, `pkg/history`, `pkg/merge`, `pkg/render`, `pkg/semantics`,
+  `pkg/migrate`, `pkg/registry`, `pkg/canon`, `pkg/cli`, `pkg/diffconform`, `pkg/fuzzmaturity`,
+  `pkg/benchconfig`, `pkg/ceilings`, `pkg/governance`, `pkg/traceability`, plus `cmd/protodoc`,
+  `cmd/protodoc-diffconform`, `cmd/protodoc-traceaudit`.
+- **M19 (Conformance, Fuzzing & Governance Convergence): 11 of 20 tasks done.** 9 remain, and all 9 are
+  real-world actions no agent can perform by writing code: T-0345/T-0346 (external-implementer trials, 5-day
+  and 30-day budgets), T-0347/T-0356/T-0358/T-0365 (Eyvar's personal governance rulings/sign-offs), T-0349
+  (second-implementation funding/sponsor decision), T-0351 (commissioning and running the actual second
+  independent implementation conformance run), T-0371 (real IANA media-type/format-identification filing).
+  See the honesty rule below — none of these should ever be faked to close them out.
 
-**Why M18/M19 have any commits at all despite M02–M17 being empty, and a cautionary tale about trusting
-self-reports:** an automated batch-implementation run processed milestones in real topological order (M01 →
-M02 → M04 → ... → M17 → M18 → M19 — see "Real build order" below, NOT `tasks.md` §1's table row order) via
-many sequential subagent calls. A usage-limit error hit partway through M02 and, due to a bug in the
-orchestrating script (since fixed — see `git log` history around 2026-09-15/16 if curious), the run did not
-stop: it kept advancing through the batch list, so every M02–M16 and early-M17 batch failed identically on the
-same limit, while enough real time passed mid-run for the limit to reset before the run reached late-M17/M18/
-M19, which then genuinely succeeded. **Separately, and worse: the M18/M19 batches that DID run self-reported
-completing all their assigned tasks, but only a fraction actually produced a real commit with a `Refs:`
-trailer** (4/17 and 10/20 respectively) — the self-report cannot be trusted at face value even for batches that
-"succeeded." **Lesson for whoever continues this: after ANY automated or agent-driven implementation pass,
-re-verify against `git log`'s `Refs:` trailers before believing anything is done.** Regenerate the task/status
-picture with `python3 scripts/extract_milestone_tasks.py` (writes to `.impl_tasks/`, gitignored, regenerated
-from `tasks.md` — never hand-edit its output) rather than trusting any prior conversation's task list.
+**Lesson baked in from the earlier handoff, still load-bearing:** an earlier automated Claude Code batch run
+over-reported completion by ~3x on M18/M19 before this jump (self-reported all tasks done, only a fraction had
+real commits) — full forensic detail is in git history around 2026-09-15/16 if curious. **The rule stands for
+whoever continues this: after ANY automated or agent-driven implementation pass, re-verify against `git log`'s
+`Refs:` trailers before believing anything is done.** Regenerate the task/status picture with
+`python3 scripts/extract_milestone_tasks.py` (writes to `.impl_tasks/`, gitignored, regenerated from
+`tasks.md` — never hand-edit its output) rather than trusting any prior conversation's task list. Cross-check
+with:
+```
+git log --all --format="%H" | while read sha; do git show -s --format="%B" "$sha" | grep "^Refs:"; done \
+  | grep -o "T-[0-9]\{4\}" | sort -u
+```
 
-**M18's and M19's 14 completed tasks were built without their real prerequisites** (M02–M17 don't exist).
-They almost certainly need a review/rework pass once the real dependencies land — e.g. the CLI's `inspect` verb
-and the traceability table can't yet do anything with identity, signatures, or redaction, because nothing to
-inspect exists. Do not assume M18/M19's existing code is correct or complete just because it builds and its own
-tests pass; its tests can only exercise what's actually there yet.
+**M02–M18 were built by a different tool than the one that did M01** — they have not had a Claude-Code-side
+review pass. Nothing here indicates a problem (build/vet/test all green), but if you're doing a Verify-phase
+(phase 7) audit, do not assume clean CI means the code matches every contract/data-model detail; a real review
+pass against `contracts/*.abnf` and `data-model.md` has not happened yet for M02–M18.
 
 ### Real build order (topological, NOT tasks.md §1's table row order)
 
@@ -110,8 +110,9 @@ order — M03 depends on M07 (a phase-5 fix, see `analysis.md` GAP A), which the
 this order yourself with `scripts/extract_milestone_tasks.py` rather than reading the table's row order as a
 sequence; the script's `_index.json` carries the real order under `topo_order`.
 
-**Next task to implement, in order: T-0033 (first task of M02, Ledger & Placement).** Read its full detail in
-`tasks.md` §3 (`### M02: Ledger & Placement`) or in `.impl_tasks/M02.json` after regenerating.
+**Next tasks to implement: the 9 remaining M19 tasks, all real-world (not code) actions — see the list above.**
+No code-writing tasks remain in M01–M18. Once M19's 9 items are resolved (or explicitly deferred by Eyvar),
+the project moves to Phase 7 (Verify).
 
 ### How to continue: the discipline that must not slip
 
