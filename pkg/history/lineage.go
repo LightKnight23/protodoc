@@ -101,3 +101,58 @@ func (l Lineage) Ancestors(state container.StateID) (map[container.StateID]bool,
 	}
 	return set, nil
 }
+
+// ErrNoCommonAncestor is returned when two states share no common ancestor in
+// the combined lineage (they are unrelated).
+var ErrNoCommonAncestor = errors.New("history: the two states share no common ancestor")
+
+// NearestCommonAncestor returns the nearest common ancestor state of a and b,
+// computed from this lineage alone (FR-005): no coordinating service, no
+// network. It walks a's ancestry to a set, then walks b's ancestry until it
+// hits a state in that set -- the first hit is the nearest common ancestor
+// (nearest to b along its own chain, which for a tree lineage is the deepest
+// shared state). Both a and b must be known to the graph. It errors if the two
+// share no common ancestor.
+//
+// For divergent copies, the caller MERGES the two files' lineages (each file
+// carries its own operation log with the shared prefix) into one Lineage, then
+// calls this: the shared prefix's states appear in both logs with identical
+// state-ids, so the common ancestry is discoverable from the two files alone.
+func (l Lineage) NearestCommonAncestor(a, b container.StateID) (container.StateID, error) {
+	aSet, err := l.Ancestors(a)
+	if err != nil {
+		return zeroStateID, err
+	}
+	if !l.known[b] {
+		return zeroStateID, ErrUnknownState
+	}
+	bChain, err := l.WalkPredecessors(b)
+	if err != nil {
+		return zeroStateID, err
+	}
+	for _, s := range bChain {
+		if aSet[s] {
+			return s, nil
+		}
+	}
+	return zeroStateID, ErrNoCommonAncestor
+}
+
+// Merge folds another lineage's edges into this one (used to combine two
+// divergent copies' operation-log lineages for common-ancestor computation).
+// A shared state keeps its existing parent (the shared prefix is identical in
+// both, so no conflict arises for a well-formed pair).
+func (l *Lineage) Merge(other Lineage) {
+	if l.parent == nil {
+		l.parent = map[container.StateID]container.StateID{}
+		l.known = map[container.StateID]bool{}
+	}
+	for s := range other.known {
+		l.known[s] = true
+	}
+	for s, p := range other.parent {
+		if _, ok := l.parent[s]; !ok {
+			l.parent[s] = p
+		}
+	}
+}
