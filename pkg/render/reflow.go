@@ -145,10 +145,10 @@ func lineDemerits(items []Item, i, j, lineW, width, stretch, shrink int) int {
 	case diff >= 0:
 		// Need to stretch by diff; if no stretch available and diff>0, penalize.
 		if stretch == 0 {
-			badness = diff * diff
+			badness = boundedSquare(diff)
 		} else {
 			r := (diff * 100) / stretch // integer ratio *100
-			badness = r * r
+			badness = boundedSquare(r)
 		}
 	default:
 		over := -diff
@@ -156,10 +156,10 @@ func lineDemerits(items []Item, i, j, lineW, width, stretch, shrink int) int {
 			return infinity // cannot shrink enough -> line does not fit
 		}
 		if shrink == 0 {
-			badness = over * over
+			badness = boundedSquare(over)
 		} else {
 			r := (over * 100) / shrink
-			badness = r * r
+			badness = boundedSquare(r)
 		}
 	}
 	// Penalty contribution at breakpoint j (if it is a penalty item).
@@ -173,7 +173,27 @@ func lineDemerits(items []Item, i, j, lineW, width, stretch, shrink int) int {
 	}
 	d := badness + pen + 1 // +1 line penalty to prefer fewer lines on ties
 	if d < 0 || d >= infinity {
-		return infinity
+		// A feasible-but-loose line: cap just below infinity so it is still
+		// choosable when nothing tighter is available, but always dominated by
+		// a genuinely fitting line.
+		return infinity - 1
 	}
 	return d
 }
+
+// boundedSquare returns x*x capped at maxBadness so a large-but-feasible line
+// is never mistaken for the infeasible sentinel.
+func boundedSquare(x int) int {
+	if x >= maxBadnessRoot || x <= -maxBadnessRoot {
+		return maxBadness
+	}
+	return x * x
+}
+
+// maxBadness is the largest badness a single line may contribute; maxBadnessRoot
+// is its integer square root. Both stay well below infinity so sums of a
+// bounded number of lines cannot overflow into or past the sentinel.
+const (
+	maxBadness     = 1 << 20
+	maxBadnessRoot = 1 << 10
+)
