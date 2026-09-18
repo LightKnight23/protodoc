@@ -533,11 +533,22 @@ document.abnf S4 already assigns this record discriminant `0x03` and its field s
 | direction | `uint8` | mandatory | closed value set `{0 = LTR, 1 = RTL}` | base writing direction (FR-032); provisional per T-0267 ruling (clarify-002.md, OPEN) |
 | tbl_rows | `[]unit-id` | yes | plain sequence, current document order | row ids |
 | tbl_columns | `[]unit-id` | yes | plain sequence, symmetric to `tbl_rows` | column ids |
-| tbl_cells | `[]cell-entry` | yes | each entry names `(cell_row, cell_col, content)` | `cell_row` and `cell_col` must each resolve into `tbl_rows`/`tbl_columns` respectively |
+| tbl_cells | `[]cell-entry` | yes | each entry names `(cell_row, cell_col, content, cell_kind, cell_scope)` | `cell_row` and `cell_col` must each resolve into `tbl_rows`/`tbl_columns` respectively |
+
+Cell-entry fields (FR-039; provisional per T-0267):
+
+| Field | Type | Required | Constraint | Notes |
+|---|---|---|---|---|
+| cell_row | unit-id | yes | resolves into `tbl_rows` | the cell's row |
+| cell_col | unit-id | yes | resolves into `tbl_columns` | the cell's column |
+| cell_content | unit-id | yes | TEXT_BLOCK id | the cell's content |
+| cell_kind | `uint8` | yes | closed `{0 = data, 1 = header}` | data vs header cell (FR-039) |
+| cell_scope | `uint8` | yes | closed `{0 = row, 1 = column, 2 = row-group, 3 = column-group}` | which data cells a HEADER cell heads; NORMATIVE-ignored for a data cell (FR-039) |
 
 Invariants:
-1. `tbl_cells` tiles the `tbl_rows` x `tbl_columns` grid exactly once: no two entries name the same `(cell_row, cell_col)` pair, and no `(row, col)` pair in range is left unnamed (FR-082).
+1. `tbl_cells` tiles the `tbl_rows` x `tbl_columns` grid exactly once: no two entries name the same `(cell_row, cell_col)` pair, and no `(row, col)` pair in range is left unnamed (FR-082; validator rule PD-TBL-001b, T-0283).
 2. A `cell_entry` naming a row or column id absent from `tbl_rows`/`tbl_columns` is a structural reject.
+3. Every HEADER cell (`cell_kind = 1`) MUST declare a scope, and that scope MUST resolve to at least one real data cell in the grid (FR-039; validator rule PD-TBL-001a, T-0282). A header scope covering no data cell is a structural reject naming the header cell.
 
 Identity: `tbl_id` (content-unit identity).
 

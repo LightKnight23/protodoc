@@ -280,7 +280,7 @@ tbl-rows            = field                         ; tag=2; field-value = plain
 tbl-columns         = field                         ; tag=3; field-value = plain-seq-of(unit-id); symmetric to tbl-rows
 tbl-cells           = field                         ; tag=4; field-value = plain-seq-of(cell-entry)
 
-cell-entry          = cell-row cell-col cell-content
+cell-entry          = cell-row cell-col cell-content cell-kind cell-scope
 cell-row            = unit-id                       ; NORMATIVE (FR-108): MUST resolve to exactly one id currently present
                                                      ; in the enclosing table's tbl-rows; a cell naming an absent row is
                                                      ; rejected at validation, never clamped to the nearest row.
@@ -288,6 +288,16 @@ cell-col            = unit-id                       ; NORMATIVE: symmetric, MUST
 cell-content        = unit-id                       ; NORMATIVE: the unit-id of a TEXT_BLOCK (S2) holding the cell's
                                                      ; content; a cell's content is edited exactly like any other text
                                                      ; block, R1 SEQUENCE-ORDER for concurrent insertions within it.
+cell-kind           = u8                            ; NORMATIVE (FR-039): 0x00 = data cell, 0x01 = header cell;
+                                                     ; 0x02-0xFF reserved, MUST be rejected. Provisional per T-0267.
+cell-scope          = u8                            ; NORMATIVE (FR-039): the accessibility scope a HEADER cell heads:
+                                                     ; 0x00 = row, 0x01 = column, 0x02 = row-group, 0x03 = column-group;
+                                                     ; 0x04-0xFF reserved, MUST be rejected. For a DATA cell
+                                                     ; (cell-kind 0x00) the field is present for shape uniformity and is
+                                                     ; NORMATIVE-ignored (a reader MUST NOT apply scope semantics to a
+                                                     ; data cell). A HEADER cell (cell-kind 0x01) MUST carry a scope that
+                                                     ; resolves to at least one real data cell (PD-TBL-001a, T-0282).
+                                                     ; Provisional per T-0267 (clarify-002.md, OPEN).
 
 
 ; ============================================================================
