@@ -140,6 +140,39 @@ func derSequenceLen(b []byte) (int, error) {
 	return total, nil
 }
 
+// ErrRevocationEvidenceEmpty is returned when a revocation-evidence record
+// carries no DER octets.
+var ErrRevocationEvidenceEmpty = errors.New("integrity: revocation-evidence carries empty DER octets")
+
+// VerifyRevocationEvidenceParsesOffline validates a revocation-evidence
+// ATTESTATION_EVIDENCE (ae-kind=1, ae-format OCSP or CRL) offline. Per
+// integrity.abnf S9, ae-der-octets is OPAQUE: this package does not
+// reimplement OCSP (RFC 6960) or CRL (RFC 5280) parsing. Offline validation
+// confirms the kind/format pairing holds, the declared format is a revocation
+// format, and the DER octets are present and well-framed as a single DER
+// SEQUENCE spanning exactly the octets (both an OCSP response and a CRL are
+// top-level SEQUENCEs) -- all with no network access. The opaque payload is
+// retained verbatim for a caller that does implement the external standard.
+func VerifyRevocationEvidenceParsesOffline(ev AttestationEvidence) error {
+	if ev.Kind != AeRevocationEvidence {
+		return fmt.Errorf("%w: not revocation-evidence", ErrAeKindFormatPairing)
+	}
+	if err := ValidateKindFormatPairing(ev.Kind, ev.Format); err != nil {
+		return err
+	}
+	if len(ev.DEROctets) == 0 {
+		return ErrRevocationEvidenceEmpty
+	}
+	n, err := derSequenceLen(ev.DEROctets)
+	if err != nil {
+		return fmt.Errorf("integrity: revocation-evidence DER framing: %w", err)
+	}
+	if n != len(ev.DEROctets) {
+		return fmt.Errorf("integrity: revocation-evidence has %d trailing octets after its DER SEQUENCE", len(ev.DEROctets)-n)
+	}
+	return nil
+}
+
 // VerifyCredentialChainOffline verifies a credential-chain ATTESTATION_EVIDENCE
 // (ae-kind=0, ae-format=X.509 chain) OFFLINE against a fixed local trust-anchor
 // list at the attested time. It parses the concatenated leaf-to-root DER
