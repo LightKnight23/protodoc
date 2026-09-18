@@ -22,6 +22,11 @@ type PublishInput struct {
 	// superseded content unit -- the octets that MUST NOT appear in the
 	// output.
 	RemovedFrames [][]byte
+	// ActorIdentityValues is the set of octet values drawn from the
+	// actor-identity inventory (FR-079) that MUST NOT appear in the output
+	// (FR-080). The publish operation strips them; the output is scanned to
+	// confirm none survives.
+	ActorIdentityValues [][]byte
 }
 
 // PublishOutput is a published document's emitted octets plus the retained
@@ -46,7 +51,34 @@ func Publish(in PublishInput) PublishOutput {
 		}
 		out = append(out, r.Frame...)
 	}
+	// Strip every actor-identity value (FR-080): the published output must
+	// contain no value from the identity inventory. Each value's octet
+	// occurrences are removed from the emitted stream.
+	for _, v := range in.ActorIdentityValues {
+		if len(v) == 0 {
+			continue
+		}
+		out = stripAll(out, v)
+	}
 	return PublishOutput{Emitted: out}
+}
+
+// stripAll removes every non-overlapping occurrence of needle from b.
+func stripAll(b, needle []byte) []byte {
+	if len(needle) == 0 {
+		return b
+	}
+	var out []byte
+	for {
+		i := bytes.Index(b, needle)
+		if i < 0 {
+			out = append(out, b...)
+			break
+		}
+		out = append(out, b[:i]...)
+		b = b[i+len(needle):]
+	}
+	return out
 }
 
 // ResidueFinding names a removed unit whose octet sequence was found in the
