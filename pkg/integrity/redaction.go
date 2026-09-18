@@ -83,6 +83,36 @@ func (s RedactableSubtree) Commitment() (Digest, error) {
 // the subtree removes the salt.
 func (s RedactableSubtree) SaltStoredInside() bool { return !s.removed }
 
+// Remove performs the act of redaction: it deletes BOTH the subtree's frame
+// octets AND its salt in the same operation, retaining only the bare 32-octet
+// commitment digest (integrity.abnf S7.1). After Remove, the subtree holds no
+// plaintext and no salt anywhere; the commitment digest is unchanged, so the
+// signed T_C_root that committed to it still verifies (FR-076). Remove is
+// idempotent-safe only in that a second call errors rather than corrupting the
+// retained commitment. It errors if the subtree was never designated.
+func (s *RedactableSubtree) Remove() error {
+	if !s.Designated {
+		return ErrNotDesignated
+	}
+	if s.removed {
+		return ErrAlreadyRemoved
+	}
+	// Compute the commitment from the live frame+salt BEFORE erasing them.
+	s.commitment = TCLeafRedactable(s.Salt, s.Frame)
+	// Erase both, together, in this one operation.
+	for i := range s.Frame {
+		s.Frame[i] = 0
+	}
+	s.Frame = nil
+	s.Salt = zeroSalt
+	s.removed = true
+	return nil
+}
+
+// Removed reports whether this subtree has been redacted (frame and salt
+// erased, only the bare commitment retained).
+func (s RedactableSubtree) Removed() bool { return s.removed }
+
 // zeroSalt is the all-zero salt, used to prove the salt is gone after removal.
 var zeroSalt [SaltSize]byte
 
