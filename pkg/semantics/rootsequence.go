@@ -26,3 +26,54 @@ func (rs RootSequence) Position(unit pdlfmt.UnitID) (int, bool) {
 	}
 	return 0, false
 }
+
+// RuleRootSequenceCompleteness is the validator rule id requiring every content
+// unit to appear in ROOT_SEQUENCE exactly once.
+const RuleRootSequenceCompleteness = "PD-A11Y-005"
+
+// RootSequenceViolationKind classifies a completeness violation.
+type RootSequenceViolationKind uint8
+
+const (
+	// ViolationDuplicate: a unit appears in rs_order more than once.
+	ViolationDuplicate RootSequenceViolationKind = iota
+	// ViolationOmission: a content unit is absent from rs_order.
+	ViolationOmission
+)
+
+// RootSequenceFinding is a PD-A11Y-005 rejection naming the rule, the offending
+// unit id, and whether it was a duplicate or an omission.
+type RootSequenceFinding struct {
+	Rule   string
+	UnitID pdlfmt.UnitID
+	Kind   RootSequenceViolationKind
+}
+
+// CheckRootSequenceCompleteness applies PD-A11Y-005: it verifies rs_order lists
+// every unit in `contentUnits` EXACTLY ONCE. It returns findings for every
+// duplicate (a unit listed twice) and every omission (a content unit absent
+// from rs_order), each naming the offending unit id. An empty result means the
+// reading order is complete.
+func (rs RootSequence) CheckRootSequenceCompleteness(contentUnits []pdlfmt.UnitID) []RootSequenceFinding {
+	var findings []RootSequenceFinding
+
+	seen := make(map[pdlfmt.UnitID]int, len(rs.Order))
+	for _, u := range rs.Order {
+		seen[u]++
+	}
+	// Duplicates (report each duplicated unit once, in rs_order first-seen order).
+	reported := make(map[pdlfmt.UnitID]bool)
+	for _, u := range rs.Order {
+		if seen[u] > 1 && !reported[u] {
+			findings = append(findings, RootSequenceFinding{Rule: RuleRootSequenceCompleteness, UnitID: u, Kind: ViolationDuplicate})
+			reported[u] = true
+		}
+	}
+	// Omissions: a content unit not present in rs_order.
+	for _, u := range contentUnits {
+		if seen[u] == 0 {
+			findings = append(findings, RootSequenceFinding{Rule: RuleRootSequenceCompleteness, UnitID: u, Kind: ViolationOmission})
+		}
+	}
+	return findings
+}

@@ -335,6 +335,18 @@ xref-kind           = field                         ; tag=3; field-value = u8: 0
 xref-anchor         = field                         ; tag=4; field-value = anchor-point (S3.1), the reference's own
                                                      ; source position; anchor-boundary is NORMATIVE-ignored, as for NOTE.
 
+; ---- 5.1 ROOT_SEQUENCE (authored reading-order record) --------------------
+; The document's authoritative logical reading order over its content units
+; (FR-036, data-model.md 2.27). Provisional per T-0267 (clarify-002.md, OPEN).
+root-sequence       = rs-discriminant rs-id rs-order
+rs-discriminant     = %x07                          ; tag=0
+rs-id               = field                         ; tag=1; field-value = unit-id; the singleton record's own identity
+rs-order            = field                         ; tag=2; field-value = plain-seq-of(unit-id); the authored reading
+                                                     ; order, top-to-bottom. NORMATIVE (PD-A11Y-005, T-0274): EVERY
+                                                     ; content unit MUST appear EXACTLY ONCE -- no duplicate, no
+                                                     ; omission; a violation is rejected naming the offending unit id.
+                                                     ; Order is independent of storage/append order.
+
 
 ; ============================================================================
 ; 6. EXTENSION ENVELOPE -- the single forward-compatibility carrier (FR-012..FR-018, CON-005, CON-020, HC-013)
