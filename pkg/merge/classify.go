@@ -98,3 +98,30 @@ func Classify(a, b history.OpKind, target SameTarget) (Outcome, error) {
 func kindValid(k history.OpKind) bool {
 	return k == history.OpSequencePositionClaim || k == history.OpValueClaim || k == history.OpDelete
 }
+
+// R2Winner implements R2 TOTAL-ORDER-TIEBREAK (DP-015): given two concurrent
+// value-claims' authoring state-ids, the winner is the one whose state-id is
+// LARGER under unsigned big-endian comparison (last-writer-wins by state id,
+// deterministically). It returns +1 if a wins, -1 if b wins, and 0 only if the
+// two state-ids are byte-identical (the same authoring state, not a real
+// contention). The comparison is a pure function of the 32 octets, so two
+// implementations pick the identical winner. Using the larger id as "winner"
+// is a fixed, documented convention; the requirement is only that it be total
+// and deterministic, which it is.
+func R2Winner(a, b [32]byte) int {
+	return bytesCompareBE(a, b)
+}
+
+// bytesCompareBE compares two 32-octet values as unsigned big-endian integers,
+// returning -1, 0, or +1 for a<b, a==b, a>b.
+func bytesCompareBE(a, b [32]byte) int {
+	for i := 0; i < 32; i++ {
+		if a[i] != b[i] {
+			if a[i] < b[i] {
+				return -1
+			}
+			return 1
+		}
+	}
+	return 0
+}
