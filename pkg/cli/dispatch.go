@@ -117,7 +117,7 @@ var verbs = []Verb{
 	{Name: "verify", Usage: "protodoc verify <file> [--signature <id>] [--offline]", Run: runVerify},
 	{Name: "diff", Usage: "protodoc diff <fileA> <fileB> [--format=json|text]", Run: runDiff},
 	{Name: "merge", Usage: "protodoc merge <base> <a> <b> --out <path>", Run: runMerge},
-	{Name: "project", Usage: "protodoc project <file> --to <path> [--format=text|html]", Run: notImplemented("project")},
+	{Name: "project", Usage: "protodoc project <file> --to <path> [--format=text|html]", Run: runProject},
 	{Name: "redact", Usage: "protodoc redact <file> --subtree <unit-id> [--subtree <unit-id>...] --out <path>", Run: notImplemented("redact")},
 	{Name: "publish", Usage: "protodoc publish <file> --out <path> [--partial]", Run: notImplemented("publish")},
 	{Name: "sign", Usage: "protodoc sign <file> --key <ref> --coverage total|subset [--subset-range <start>:<end> ...] --intent <value> --out <path>", Run: notImplemented("sign")},
