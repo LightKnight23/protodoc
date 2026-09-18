@@ -82,19 +82,19 @@ choose between.
 
 ## Full gap list
 
-### Requirement ids with zero conformance cases (13)
+### Requirement ids with zero conformance cases (12)
 
 CON-016,
-FR-037, FR-038,
+FR-038,
 FR-039, FR-040,
 FR-083, FR-099,
 FR-118, FR-124, NFR-002,
 NFR-025, NFR-031,
 TR-001
 
-### Rule ids with zero conformance cases (18)
+### Rule ids with zero conformance cases (17)
 
-PD-2D-001, PD-A11Y-001, PD-A11Y-002, PD-A11Y-003, PD-A11Y-004,
+PD-2D-001, PD-A11Y-002, PD-A11Y-003, PD-A11Y-004,
 PD-DISC-001, PD-DUP-001, PD-EXT-001,
 PD-FONT-001, PD-INDEX-001, PD-INFER-001, PD-MODE-001, PD-NFC-001, PD-NFC-002,
 PD-NORM-001, PD-PREV-001, PD-SEGTYPE-001, PD-TBL-001
