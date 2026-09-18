@@ -93,6 +93,7 @@ Purpose: bounded preview raster and document metadata readable without touching 
 | preview_raster | `[]byte` | no | `<= 131072` octets, PLP-1 or restricted-PNG | non-normative (HC-009) |
 | preview_source_snapshot | `[]byte` | no | `<= 4096` octets | digest of render input at preview time, for staleness detection |
 | document_metadata.title | UTF-8 `string` | no | NFC (CQ-009) | participates in `structure_digest` |
+| document_metadata.direction | `uint8` | mandatory | closed value set `{0 = LTR, 1 = RTL}` | top-level document base writing direction (FR-032); provisional per T-0267 ruling (clarify-002.md, OPEN) |
 | document_metadata.page_count | `uint32` | no | | participates |
 | document_metadata.page_dimensions | `[2]int64` (914400-per-inch base units) | no | integer only, no float (CON-012) | participates |
 | document_metadata.language | BCP-47 `string` | no | NFC | participates |
@@ -172,6 +173,7 @@ Purpose: NFC-normalized, run-composed unit of identity-bearing text (CQ-001, CQ-
 | Field | Type | Required | Constraint | Notes |
 |---|---|---|---|---|
 | block_id | `[16]byte` | yes | unique within document | |
+| direction | `uint8` | mandatory | closed value set `{0 = LTR, 1 = RTL}` | base writing direction (FR-032); provisional per T-0267 ruling (clarify-002.md, OPEN) |
 | language_ref | `uint16` | no | | |
 | runs | `[]Run` | yes | `>= 1` | ordered by base_ordinal within the block |
 
@@ -528,6 +530,7 @@ document.abnf S4 already assigns this record discriminant `0x03` and its field s
 | Field | Type | Required | Constraint | Notes |
 |---|---|---|---|---|
 | tbl_id | unit-id | yes | | content-unit identity of the table itself |
+| direction | `uint8` | mandatory | closed value set `{0 = LTR, 1 = RTL}` | base writing direction (FR-032); provisional per T-0267 ruling (clarify-002.md, OPEN) |
 | tbl_rows | `[]unit-id` | yes | plain sequence, current document order | row ids |
 | tbl_columns | `[]unit-id` | yes | plain sequence, symmetric to `tbl_rows` | column ids |
 | tbl_cells | `[]cell-entry` | yes | each entry names `(cell_row, cell_col, content)` | `cell_row` and `cell_col` must each resolve into `tbl_rows`/`tbl_columns` respectively |
