@@ -23,13 +23,17 @@ T-0306 recorded an author-conducted review without fabricating an external audit
 - **Unblocks when:** Eyvar records the ruling (date, decision-maker, decision, rationale) here and in
   plan.md Section 9.
 
-### T-0349 — NFR-028 / CQ-012 two-implementation funding decision (OPEN, awaiting Eyvar García)
+### T-0349 — NFR-028 / CQ-012 two-implementation funding decision (RESOLVED)
 
-- **Status:** OPEN. plan.md Section 8 discloses (high severity) that the two-independent-implementation
-  gate has no funding/sponsor/recruitment strategy on record and asks Eyvar to decide.
-- **Blocked on:** an explicit funding/sponsor decision by Eyvar García.
-- **Unblocks when:** Eyvar records the decision (date, decision-maker, path-forward,
-  fallback-if-unfunded) here and in plan.md Section 8.
+- **Date:** 2026-09-18
+- **Decision-maker:** Eyvar García
+- **Path-forward:** community bounty. A public bounty will be posted and an implementer recruited from
+  the community to build the second independent implementation of container/validate/canon, per the
+  T-0348 acceptance protocol.
+- **Fallback-if-unfunded:** if no bounty claimant emerges within a reasonable window, T-0351 remains
+  deferred indefinitely; T-0358's v1-stable capstone records CP-003/NFR-028 as an open blocking gate
+  rather than proceeding without it satisfied.
+- Mirrored in plan.md Section 8's risk row for this item.
 
 ### T-0356 — CON-026 licence/governance gate approval (OPEN, awaiting Eyvar García)
 
@@ -65,7 +69,8 @@ T-0306 recorded an author-conducted review without fabricating an external audit
 
 ## Honesty note
 
-No entry above names Eyvar García as a decision-maker, because none of these decisions has actually been
-made by him. Recording them as OPEN is the correct, honest state; the corresponding tests will remain
+T-0349 above names Eyvar García as decision-maker because that decision was actually made by him on
+2026-09-18. Every other OPEN entry names no decision-maker, because none of those decisions has actually
+been made yet. Recording them as OPEN is the correct, honest state; the corresponding tests will remain
 red-by-design until the real ruling/trial occurs, which is the release gate doing its job rather than a
 defect to paper over.
