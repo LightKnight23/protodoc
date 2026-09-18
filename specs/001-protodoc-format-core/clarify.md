@@ -299,3 +299,22 @@ reversible.
   NFR-030 benchmark).
 - **Status:** OPEN — awaiting Eyvar's ruling. No fabricated resolution is recorded here; the
   adopted reading is provisional and reversible until ruled upon.
+
+### RR-FR-079: where is live-annotation authorship carried?
+
+- **Question:** FR-079 requires a single enumerable inventory of every field carrying actor identity,
+  actor-device identity, or per-actor edit attribution. The only actor/author-carrying field found in
+  `data-model.md`/`document.abnf` is `Annotation.orphan.author_ref`, populated only once an annotation
+  is orphaned. `document.abnf`'s own comment asserts a LIVE (non-orphaned) annotation's authorship is
+  "carried by the identity apparatus of its `ann-body-block`'s own runs," but `Run`'s record shape
+  (`document.abnf` S2.1) carries no author/actor field, and FR-023 / CQ-004 explicitly bar `run_id`
+  from carrying any actor-derived value. So that comment's claim is unsupported by the record it points
+  to: there is no field on a live annotation's runs where authorship could live.
+- **Status:** OPEN — awaiting a ruling from Eyvar/themis. This item is recorded rather than resolved:
+  adding an author field to `Run` would reopen an approved, frozen data-model outside phase-4 authority,
+  and is NOT done here.
+- **Impact on the actor-identity inventory (FR-079/FR-080/FR-081):** the M11 inventory enumerates the
+  actor-identity fields that DO exist in the frozen model (notably `orphan.author_ref`); if the ruling
+  adds a live-annotation authorship field, it must be added to the inventory at that time. Recorded as a
+  dated open item so the inventory's completeness claim is scoped to the current frozen model.
+- **Date requested:** 2026-09-17.
