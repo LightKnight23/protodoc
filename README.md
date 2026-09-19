@@ -90,6 +90,26 @@ cmd/                              CLI entry points for the packages above
 go.mod                            Go 1.25 module
 ```
 
+## Stack
+
+- **Go 1.25**, standard library only in the reference implementation — zero third-party dependencies
+  (`go.mod` has no `require` block), per constitution principle CP-010. Cross-compilation targets:
+  darwin, linux, windows on amd64 and arm64.
+- **Cryptography**: unmodified stdlib `crypto/ed25519` for signing (wrapped by a 7-step
+  canonical/small-order-rejecting verification procedure, `pkg/eddsa`) and `crypto/sha256` for every
+  Merkle-tree and commitment digest. No third-party curve or hashing library.
+- **Wire format**: a bespoke deterministic TLV encoding (`pkg/pdlfmt`) and a Bitcoin-CompactSize-style
+  varint — no protobuf, no third-party serialization library (see `research.md` §3 for why protobuf
+  was rejected).
+- **Specification**: Markdown for prose (`spec.md`, `plan.md`, etc.) and ABNF for normative wire
+  grammars (`contracts/*.abnf`), following the Spec-Driven Development (SDD) methodology throughout
+  (`.specify/memory/constitution.md`).
+- **Tooling**: Python 3 for `scripts/extract_milestone_tasks.py` (mechanical task-list regeneration,
+  no runtime dependency on the Go module); The National Archives' DROID/sigtool for verifying the
+  PRONOM file-signature submission against a real generated sample.
+- **Version control and hosting**: Git, GitHub (issues, Pages for the public spec URL), the `gh` CLI
+  for repository and registration workflows.
+
 ## Acknowledgments
 
 Protodoc went from a rough sketch to a frozen, cross-referenced spec and a working, tested Go
