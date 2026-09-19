@@ -18,8 +18,9 @@ func TestTR_012_ProjectVerbReadsRealFile(t *testing.T) {
 		t.Errorf("absent file: status=%s, want INVALID", res.Status)
 	}
 
-	// (2) A real document with CONTENT segments -> non-empty projection.
-	doc := writeDocWithContentSegments(t, 2, 512)
+	// (2) A real document with CONTENT frames -> non-empty projection keyed by
+	// the AUTHORED unit-id.
+	doc, ids := writeDocWithRealFrames(t, cliUnit(0xA1), cliUnit(0xB2))
 	res = runProject([]string{doc, "--format=text"}, nil)
 	if res.Status != "OK" {
 		t.Fatalf("content doc: status=%s (%+v), want OK", res.Status, res.Findings)
@@ -28,10 +29,11 @@ func TestTR_012_ProjectVerbReadsRealFile(t *testing.T) {
 	if strings.TrimSpace(projection) == "" {
 		t.Errorf("projection of a document with content must be non-empty")
 	}
-	// It must contain the hex of the real frame bytes (body was 0x41.. 'A'/'B').
-	if !strings.Contains(projection, "41") {
-		t.Errorf("projection should include the real frame bytes (0x41 'A'), got %q", projection)
+	// The projection is keyed by the authored unit-id (hex of ids[0] appears).
+	if !strings.Contains(projection, "a1") {
+		t.Errorf("projection should include the authored unit-id (a1..), got %q", projection)
 	}
+	_ = ids
 
 	// Deterministic: projecting twice gives identical output.
 	res2 := runProject([]string{doc, "--format=text"}, nil)
