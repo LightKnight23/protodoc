@@ -186,7 +186,9 @@ not fabricate a cryptographic pass.
 (42 cases across all 11 verbs and both happy-path and failure scenarios) run independently after
 DEFECT-2026-09-19's fix landed, to verify the fix rather than trust it. 31/42 passed; the 11 failures
 are four distinct, real bugs, none of them touching DEFECT-2026-09-19's fix (which is genuinely solid:
-read/decode/reject-garbage all work correctly now).
+read/decode/reject-garbage all work correctly now). **Status: RESOLVED 2026-09-19**, fixed under
+T-0383..T-0390 (one task per bug, one commit per task, verified via the full test suite plus manual
+end-to-end runs re-testing every reproduction below against the fixed binary).
 
 1. **No write verb actually writes its output file.** `project --to`, `merge --out`, `redact --out`,
    `publish --out`, `sign --out`, `migrate --out` all report `"status":"OK"` with a plausible-looking
@@ -215,9 +217,26 @@ read/decode/reject-garbage all work correctly now).
    but is structurally malformed (confirmed still correct for garbage/truncated-but-present files in the
    same test run), wrong for a file that isn't there at all.
 
-Filed as new tasks **T-0383..T-0390** in `tasks.md`'s M18 section (one task per bug, T-0390 covering the
+Filed as tasks **T-0383..T-0390** in `tasks.md`'s M18 section (one task per bug, T-0390 covering the
 cross-verb USAGE-vs-INVALID unification for item 5). The 42-case smoke-test script and its full log are
 not committed (ephemeral verification artifacts); the reproduction above is sufficient to re-derive them.
+
+**Resolution summary:**
+1. `project`/`merge`/`redact`/`publish`/`sign`/`migrate` now actually write their `--out`/`--to` file
+   (T-0383, T-0385, T-0386, T-0387, T-0388; `merge`'s real merged-content write and full SIGNATURE-segment
+   splicing for `sign` remain honestly-scoped narrower gaps, documented in their own commits/code comments
+   -- writing fabricated output there would be worse than not writing it, per this project's honesty rule).
+2. Required flags are now enforced (`USAGE` if missing) on `project`, `redact`, `publish`, `sign`, `migrate`
+   (same tasks as above).
+3. `merge` now reports `INVALID` for a missing/unreadable input, never `REFUSED` (T-0384).
+4. `diff`'s stdout now carries the documented `{identical, added, removed, changed}` fields (T-0389),
+   alongside the pre-existing fields for backward compatibility.
+5. Every verb now reports `USAGE` for a nonexistent/unopenable file, matching `inspect`'s original
+   correct behaviour, via a shared `ErrFileUnreadable` sentinel (T-0390). A file that exists but is
+   structurally malformed is unaffected and still correctly reports `INVALID`.
+
+Independently verified (not self-reported): full `go build`/`go vet`/`go test ./...` green, plus manual
+end-to-end re-runs of every reproduction command above against the fixed binary.
 
 ## Honesty note
 

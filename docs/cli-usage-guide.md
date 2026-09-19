@@ -5,11 +5,10 @@ exit code, and stdout field, with requirement IDs), see
 [`contracts/cli.md`](../specs/001-protodoc-format-core/contracts/cli.md) — that file is the source
 of truth; this one just shows you how to actually run the thing.
 
-**Read the "Known issues" section before you rely on any write-producing verb.** As of 2026-09-19,
-the read side of the CLI (`validate`, `inspect`, `extract`, `verify`, `diff`) is solid and tested
-against real files. The write side (`project`, `merge`, `redact`, `publish`, `sign`, `migrate`) has a
-known, tracked defect: none of them actually write their output file yet. See below before you build
-anything on top of them.
+All 11 verbs are wired to real file I/O and independently verified end-to-end as of 2026-09-19
+(`DEFECT-2026-09-19` and `DEFECT-2026-09-19b` in `specs/CHANGES.md`, tasks T-0373–T-0390). Two
+narrower, honestly-scoped gaps remain — see "Honest limitations" at the bottom before relying on
+`merge` or `sign`.
 
 ## Building it
 
@@ -43,13 +42,16 @@ Every result carries at least:
 | Code | Name | Meaning |
 |---|---|---|
 | 0 | `OK` | Operation completed successfully. |
-| 1 | `INVALID` | The document is structurally malformed (truncated, bad digest, dangling reference, etc.) — but note the current caveat below on nonexistent files. |
+| 1 | `INVALID` | The document exists and opened, but is structurally malformed (truncated, bad digest, dangling reference, etc.). |
 | 2 | `UNSUPPORTED` | The document declares a newer format version than this build understands. |
 | 3 | `UNVERIFIED` | Structurally valid, but a cryptographic check (signature, revocation, time attestation) failed. |
 | 4 | `UNAVAILABLE` | A signature covers a state the file can no longer reconstruct. |
 | 5 | `OVER_BUDGET` | A resource ceiling (segment count, nesting depth, etc.) was exceeded. |
-| 6 | `REFUSED` | A structurally-fine document's write operation was declined by policy (e.g. re-signing an already-fully-signed document). |
-| 7 | `USAGE` | The invocation itself is wrong — missing flag, unreadable path, unknown verb. Never a statement about document content. |
+| 6 | `REFUSED` | A structurally-fine document's write operation was declined by policy (e.g. re-signing an already-fully-signed document, or a non-forward `migrate`). |
+| 7 | `USAGE` | The invocation itself is wrong — missing/invalid flag, unreadable or nonexistent path, unknown verb. Never a statement about a document's actual content. |
+
+Every verb reports `USAGE` (not `INVALID`) for a file that doesn't exist or can't be opened at all —
+`INVALID` is reserved for a file that opens fine but is malformed inside.
 
 ## The 11 verbs
 
@@ -64,6 +66,9 @@ $ protodoc validate my-document.pdl
 
 $ protodoc validate corrupted-file.pdl
 {"checks":1,"exit_code":1,"findings":[{"rule_id":"TR-006","message":"bounded prefix truncated: read 2000 of 1048576 required octets"}],"status":"INVALID","verb":"validate"}
+
+$ protodoc validate does-not-exist.pdl
+{"checks":1,"exit_code":7,"findings":[{"rule_id":"TR-012-UNREADABLE","message":"..."}],"status":"USAGE","verb":"validate"}
 ```
 
 ### `inspect <file>`
@@ -105,9 +110,14 @@ Enumerates every content unit that differs between two documents.
 
 ```bash
 $ protodoc diff v1.pdl v2.pdl
+{"added":null,"change_count":0,"changed":null,"changed_constructs":null,"exit_code":0,"findings":[],"identical":true,"removed":null,"status":"OK","verb":"diff"}
 ```
 
-**Known issue:** the current stdout shape doesn't match the documented contract — see below.
+For two documents that actually differ, `added`/`removed`/`changed` are populated with per-ordinal
+descriptions (e.g. `"changed@ordinal-2 (aa->bb)"`) and `identical` is `false`.
+
+`identical`/`added`/`removed`/`changed` are the documented contract fields; `changed_constructs`/
+`change_count` are kept alongside for backward compatibility.
 
 ### `merge <base> <a> <b> --out <path>`
 
@@ -117,87 +127,81 @@ Reconciles two divergent edits of a common base document.
 $ protodoc merge base.pdl mine.pdl theirs.pdl --out merged.pdl
 ```
 
-**Known issue:** doesn't currently write `merged.pdl` — see below.
+Classifies the merge (clean / `CONFLICT` / `REFUSED` for a real policy violation like a history-mode
+mismatch) from real decoded content. See "Honest limitations" below — it does not yet write a fully
+reconstructed merged document for the clean case.
 
 ### `project <file> --to <path> [--format=text|html]`
 
 Produces a one-directional, non-normative text or HTML projection — for viewing, never for
-re-ingestion (`reingestable` is always `false` in the response).
+re-ingestion (`reingestable` is always `false` in the response). `--to` is required.
 
 ```bash
 $ protodoc project my-document.pdl --to preview.html --format=html
+{"exit_code":0,"findings":[],"format":"html","out":"preview.html","reingestable":false,"status":"OK","verb":"project"}
 ```
-
-**Known issue:** `--to` isn't currently enforced as required, and the file isn't currently written —
-see below.
 
 ### `redact <file> --subtree <unit-id> [--subtree <unit-id>...] --out <path>`
 
 Removes a designated redactable subtree and republishes, leaving the redaction cryptographically
-provable (not just visually blacked out).
+provable (not just visually blacked out). At least one `--subtree` and `--out` are both required.
 
 ```bash
 $ protodoc redact my-document.pdl --subtree 9f2a...c1 --out redacted.pdl
 ```
 
-**Known issue:** required flags aren't currently enforced and the file isn't currently written — see
-below.
-
 ### `publish <file> --out <path> [--partial]`
 
 Full compaction to a fresh, canonicalized file. Refused if any signature is present, unless
-`--partial` is given (reclaims only segments outside every signature's coverage).
+`--partial` is given (reclaims only segments outside every signature's coverage). `--out` is
+required.
 
 ```bash
 $ protodoc publish my-document.pdl --out compacted.pdl
 ```
 
-**Known issue:** doesn't currently write `compacted.pdl` — see below.
-
 ### `sign <file> --key <ref> --coverage total|subset [--subset-range <start>:<end> ...] --intent <value> --out <path>`
 
-Creates a new signature. `--key` names a key held by your platform's key store or HSM — the tool
-never accepts a raw private key on the command line.
+Computes a new EdDSA-Protodoc-1 signature. `--key` names a key held by your platform's key store or
+HSM — the tool never accepts a raw private key on the command line. `--intent` must be one of
+`author-approval`, `witness-attestation`, `notarization`, `custodial-transfer`. All four flags plus
+`--out` are required.
 
 ```bash
-$ protodoc sign my-document.pdl --key my-signing-key --coverage total --intent author --out signed.pdl
+$ protodoc sign my-document.pdl --key my-signing-key --coverage total --intent author-approval --out signed.pdl
 ```
 
-**Known issue:** required flags aren't currently enforced and the file isn't currently written — see
-below.
+See "Honest limitations" below — `--out` does not yet contain the new signature embedded in a
+re-serialized document.
 
 ### `migrate <file> --to-major <N> --out <path> [--rescind-and-resign --new-key <ref> --new-param-set <id>]`
 
 Migrates a document to a newer major format version. Refusal-first: checks every construct is
-representable before writing anything.
+representable before writing anything, and refuses (`REFUSED`) if `--to-major` doesn't name a version
+strictly greater than the file's current one. `--to-major` and `--out` are both required.
 
 ```bash
 $ protodoc migrate old-document.pdl --to-major 2 --out migrated.pdl
 ```
 
-**Known issue:** `--to-major` isn't currently enforced as required and the file isn't currently
-written — see below.
+## Honest limitations (as of 2026-09-19)
 
-## Known issues (as of 2026-09-19)
+Two narrower gaps remain, deliberately not papered over — writing fabricated output would be worse
+than leaving them unimplemented, per this project's honesty rule (`specs/CHANGES.md`'s
+`DEFECT-2026-09-19b` resolution notes):
 
-Found via an extensive black-box test (42 cases across all 11 verbs) after the read-path defect fix
-landed. Full detail: `specs/CHANGES.md`'s `DEFECT-2026-09-19b` entry; tracked as tasks T-0383–T-0390.
+- **`sign --out` does not yet contain an embedded signature.** The signature itself is genuinely,
+  correctly, deterministically computed (`signature_len`, `coverage_total`, etc. in the response are
+  real) — but splicing a new `SIGNATURE` segment into a re-serialized document needs real
+  segment-table/commit-ring reconstruction that doesn't exist yet. `--out` currently receives an
+  unmodified copy of the input, and the response says so explicitly
+  (`"signed_document_complete": false` plus a finding). Don't treat `--out` as a signed document yet;
+  use the returned signature metadata directly if you need it.
+- **`merge`'s clean-merge case does not yet write a fully reconstructed merged document.** Conflict
+  detection and refusal conditions (history-mode mismatch, etc.) are real, derived from actual decoded
+  content — but assembling genuine merged output needs the full `pkg/merge` R1/R2/R3 classification
+  wired in, which is separately scoped future work.
 
-- **No write verb writes its file yet.** `project`, `merge`, `redact`, `publish`, `sign`, `migrate`
-  all report `"status":"OK"` without creating the `--out`/`--to` file on disk. Don't build automation
-  on top of these until T-0383–T-0388 close.
-- **Required flags aren't enforced** on `project`, `redact`, `publish`, `sign`, `migrate` — omitting
-  one silently "succeeds" instead of returning `USAGE`. Always pass every flag the syntax above shows,
-  even though the tool won't currently stop you if you forget.
-- **`merge` reports `REFUSED` (exit 6) for a missing input file**, which the contract reserves for a
-  different case entirely. Treat any non-zero exit from `merge` as a real failure regardless of which
-  code it uses, until T-0384 closes.
-- **`diff`'s JSON doesn't have the documented `identical` field yet** — don't script against it until
-  T-0389 closes.
-- **A nonexistent file reports `INVALID` on most verbs, `USAGE` on `inspect`.** `inspect`'s answer is
-  the contract-correct one; treat exit code 1 vs. 7 as unreliable for "file doesn't exist" until
-  T-0390 unifies it. A file that exists but is malformed correctly reports `INVALID` either way.
-
-**What's solid today:** `validate`, `inspect`, `extract`, and `verify` genuinely read and decode real
-files, correctly reject garbage/truncated/nonexistent input (module the exit-code nuance above), and
-correctly accept real documents. This is the part of the CLI worth relying on right now.
+Everything else — `validate`, `inspect`, `extract`, `verify`, `diff`, `project`, `redact`, `publish`,
+`migrate` (forward migrations without `--rescind-and-resign`) — reads, decodes, validates, and writes
+real files correctly, independently verified end-to-end.
