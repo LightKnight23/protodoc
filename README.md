@@ -30,7 +30,8 @@ All specs (phases 0-5) are approved and frozen. Two things remain before v1 can 
 - **Format registration** with IANA (`application/vnd.protodoc` media type) and PRONOM (file-signature
   registry) — both submitted, currently awaiting review.
 
-See [`CLAUDE.md`](CLAUDE.md) § "Phase 6 status" for the full, git-verified breakdown.
+See [`specs/001-protodoc-format-core/analysis.md`](specs/001-protodoc-format-core/analysis.md) and
+[`specs/CHANGES.md`](specs/CHANGES.md) for the full, git-verified breakdown.
 
 | Artifact | What it is |
 |---|---|
