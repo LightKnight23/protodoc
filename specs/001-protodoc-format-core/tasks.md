@@ -3917,6 +3917,14 @@ cmd/protodoc wraps every package above it into the 11 TR-012 verbs and is the fi
 | T-0380 | DEFECT-2026-09-19 fix: wire publish verb to real decode chain | TR-012 | T-0336, T-0373 | hephaestus | `TestTR_012_PublishVerbReadsRealFile` (integration) |
 | T-0381 | DEFECT-2026-09-19 fix: wire sign verb to real decode chain | TR-012 | T-0337, T-0373 | hephaestus | `TestTR_012_SignVerbReadsRealFile` (integration) |
 | T-0382 | DEFECT-2026-09-19 fix: wire migrate verb to real decode chain | TR-012 | T-0338, T-0373 | hephaestus | `TestTR_012_MigrateVerbReadsRealFile` (integration) |
+| T-0383 | DEFECT-2026-09-19b fix: project actually writes --to file; enforce required --to | TR-012, TR-004 | T-0376 | hephaestus | `TestTR_012_ProjectVerbWritesOutputFile` (integration) |
+| T-0384 | DEFECT-2026-09-19b fix: merge actually writes --out file; missing-input exit code corrected from REFUSED to the contract-correct code | TR-012, TR-003 | T-0378 | hephaestus | `TestTR_012_MergeVerbWritesOutputFile` (integration) |
+| T-0385 | DEFECT-2026-09-19b fix: redact actually writes --out file; enforce required --subtree/--out | TR-012 | T-0379 | hephaestus | `TestTR_012_RedactVerbWritesOutputFile` (integration) |
+| T-0386 | DEFECT-2026-09-19b fix: publish actually writes --out file; enforce required --out | TR-012 | T-0380 | hephaestus | `TestTR_012_PublishVerbWritesOutputFile` (integration) |
+| T-0387 | DEFECT-2026-09-19b fix: sign actually writes --out file; enforce required --key/--coverage/--intent | TR-012 | T-0381 | hephaestus | `TestTR_012_SignVerbWritesOutputFile` (integration) |
+| T-0388 | DEFECT-2026-09-19b fix: migrate actually writes --out file; enforce required --to-major | TR-012 | T-0382 | hephaestus | `TestTR_012_MigrateVerbWritesOutputFile` (integration) |
+| T-0389 | DEFECT-2026-09-19b fix: diff stdout payload matches cli.md's documented `{identical, added, removed, changed}` shape | TR-012, TR-002 | T-0377 | hephaestus | `TestTR_012_DiffVerbPayloadShape` (integration) |
+| T-0390 | DEFECT-2026-09-19b fix: unify missing/unreadable-file exit code to USAGE across every verb, matching inspect's already-correct behaviour and cli.md S1's own USAGE definition | TR-012 | T-0373, T-0374, T-0375, T-0376, T-0377, T-0378, T-0379, T-0380, T-0381, T-0382 | hephaestus | `TestTR_012_MissingFileIsUsageAcrossAllVerbs` (conformance) |
 
 **T-0325** CLI command dispatch & global flags framework
 

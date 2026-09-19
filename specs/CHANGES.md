@@ -180,6 +180,45 @@ Remaining honest scope (narrower, its own future concern, NOT this gap): full Ed
 from the recomputed tree and defers that credential-chain crypto to the offline-evidence path; it does
 not fabricate a cryptographic pass.
 
+## DEFECT-2026-09-19b — CLI write verbs report OK without writing output; required flags unenforced; two contract-shape mismatches
+
+**Severity:** high (correctness). **Found:** 2026-09-19, via an extensive black-box smoke test
+(42 cases across all 11 verbs and both happy-path and failure scenarios) run independently after
+DEFECT-2026-09-19's fix landed, to verify the fix rather than trust it. 31/42 passed; the 11 failures
+are four distinct, real bugs, none of them touching DEFECT-2026-09-19's fix (which is genuinely solid:
+read/decode/reject-garbage all work correctly now).
+
+1. **No write verb actually writes its output file.** `project --to`, `merge --out`, `redact --out`,
+   `publish --out`, `sign --out`, `migrate --out` all report `"status":"OK"` with a plausible-looking
+   payload, but the destination path is never created on disk in any of the 6 cases. Reproduction:
+   ```
+   protodoc publish valid-sample.pdl --out /tmp/published.pdl
+   {"custody_preserved":true,"exit_code":0,"findings":[],"residue_octets":0,"status":"OK","verb":"publish"}
+   $ ls /tmp/published.pdl
+   ls: /tmp/published.pdl: No such file or directory
+   ```
+2. **Required flags are not enforced.** `project` (`--to`), `redact` (`--subtree`, `--out`), `publish`
+   (`--out`), `sign` (`--key`, `--coverage`), `migrate` (`--to-major`) all silently "succeed" (`OK`,
+   exit 0) when a flag `cli.md` documents as required is omitted entirely, instead of `USAGE` (exit 7).
+3. **`merge` returns `REFUSED` (exit 6) for a missing input file.** `cli.md` S7's own text restricts
+   `merge`'s `REFUSED` status to exactly one case (FR-024's identifier-collision refusal) and lists
+   `merge`'s exit codes used as "0, 1, 2, 4, 5, 7" — 6 is not among them. A missing/unreadable base
+   file returned `{"status":"REFUSED","exit_code":6,...}` instead of `INVALID` or `USAGE`.
+4. **`diff`'s stdout payload does not match `cli.md` S6's documented shape.** Contract requires
+   `{"identical": bool, "added": [...], "removed": [...], "changed": [...]}`; the real payload is
+   `{"change_count":0,"changed_constructs":null}` — no `identical` field at all, so a caller scripting
+   against the documented contract cannot read the result.
+5. **`inspect` and every other verb disagree on how to report a nonexistent file**, and `cli.md`'s own
+   text settles which is right: S1's `USAGE` definition explicitly lists "an unreadable path" as a
+   `USAGE` case (exit 7), which is what `inspect` already correctly returns. The 10 verbs DEFECT-2026-09-19
+   just fixed instead return `INVALID` (exit 1) for a nonexistent file — correct for a file that exists
+   but is structurally malformed (confirmed still correct for garbage/truncated-but-present files in the
+   same test run), wrong for a file that isn't there at all.
+
+Filed as new tasks **T-0383..T-0390** in `tasks.md`'s M18 section (one task per bug, T-0390 covering the
+cross-verb USAGE-vs-INVALID unification for item 5). The 42-case smoke-test script and its full log are
+not committed (ephemeral verification artifacts); the reproduction above is sufficient to re-derive them.
+
 ## Honesty note
 
 T-0349, T-0356, and plan.md's Conflict 5 above name Eyvar García as decision-maker because those
