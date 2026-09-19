@@ -26,11 +26,14 @@ be filed as a new task, never fixed silently inside this artifact; none were.
 - **T-0132/T-0133 T_C leaves (0x02/0x07).** PASS. Stored frame bytes used
   verbatim (no re-encode); redactable leaf salted; domain separation between
   the two proven under a salt sweep.
-- **T-0134 T_C traversal order.** PASS with FLAG carried forward: the
-  interim unit-id byte-lexicographic order is deterministic and satisfies
-  the negative constraints; the aspirational reading-order requirement is a
-  self-disclosed, documented gap (future ROOT_SEQUENCE work), not silently
-  "fixed."
+- **T-0134 T_C traversal order.** PASS. The interim unit-id
+  byte-lexicographic order (`OrderRecords`) remains as the deterministic
+  fallback for callers with no `ROOT_SEQUENCE`. The aspirational
+  reading-order requirement this review originally flagged as a future gap
+  is now closed: an additive `ROOT_SEQUENCE` record and genuine
+  reading-order traversal (`OrderRecordsBySequence`/`TCRootWithSequence`,
+  FR-036, T-0275) exist, and callers with a `ROOT_SEQUENCE` present are
+  required to key traversal on it. Updated 2026-09-19.
 - **T-0135/T-0136 T_C internal (0x08) + TCRoot.** PASS. Fixed 513-octet
   internal preimage; minimal depth <= 5; ABSENT fill at every level; TCRoot
   depends on no SegmentTableSlot or T_S value (least-coupling of the signed

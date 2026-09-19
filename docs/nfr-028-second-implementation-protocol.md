@@ -4,10 +4,13 @@ Status: DRAFT, pending Eyvar's review and approval. This document defines the
 acceptance protocol only: what scope, independence, corpus and match mean,
 and how a disagreement is triaged. It does not itself satisfy NFR-028,
 CON-019 or CP-003 (those require an actual second implementation to exist
-and pass against this protocol), and it does not record the funding or
-sponsorship decision plan.md Section 8's risk row still asks Eyvar to make
-before that second implementation can be recruited (tracked separately, see
-`specs/001-protodoc-format-core/plan.md` Section 8 and `clarify.md` CQ-012).
+and pass against this protocol). The funding/recruitment decision plan.md
+Section 8's risk row asked Eyvar to make was resolved 2026-09-19: an
+unfunded open volunteer call (no cash bounty; named credit as CP-003's
+second implementer instead), tracked in `specs/CHANGES.md`'s T-0349 entry
+and `plan.md` Section 8. Recruitment itself (finding a volunteer willing to
+do the work) is separate from this decision and is not yet complete as of
+this document.
 
 ## Purpose
 
@@ -163,8 +166,9 @@ the next:
 
 ## Non-goals
 
-This document does not fund, recruit, or commit to a second implementation.
-The CQ-012 / plan.md Section 8 funding-and-sponsorship decision remains open
-and is tracked as its own, separate governance item; this protocol defines
-only what "pass" means once a second implementation exists to run it
-against.
+This document does not itself recruit or commit a second implementer. The
+CQ-012 / plan.md Section 8 funding-and-sponsorship decision has been made
+(2026-09-19: unfunded open volunteer call, see Status above), but actually
+finding and onboarding a volunteer is tracked as its own, separate task
+(T-0351); this protocol defines only what "pass" means once a second
+implementation exists to run it against.

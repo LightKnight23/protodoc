@@ -59,9 +59,16 @@ citing.
 | Requirement(s) | Benchmark | Status |
 |---|---|---|
 | NFR-015, NFR-016 | `BenchmarkNFR_015_ColdCachePreviewLatency` (`pkg/container/coldcache_bench_test.go`) | cites `PDL-REFCFG-2026-09-DARWIN-ARM64-M2MAX` via `benchconfig.Stamp` |
-| NFR-012, NFR-013, NFR-014 | extraction benchmark (milestone M05) | not yet implemented; no extraction package exists in this repo yet |
-| NFR-017, NFR-018 | page-render benchmark (milestone M14) | not yet implemented; no render package exists in this repo yet |
-| NFR-019 | rasterizer determinism check (milestone M14) | not yet implemented; NFR-019 is a determinism requirement, not itself a time/memory bound, so whether it needs a reference-config citation under A-REFPLAT is for M14's implementer to confirm against the reference-config's own scope when that package is built |
+| NFR-012 | `BenchmarkNFR_012_ExtractionReadsWithin15PercentOfFileOctets` (`pkg/extract/octetsbudget_bench_test.go`) | cites `PDL-REFCFG-2026-09-DARWIN-ARM64-M2MAX` via `benchconfig.Stamp` |
+| NFR-013 | `BenchmarkNFR_013_ExtractionCompletesWithinProcessorTimeBudget` (`pkg/extract/timebudget_bench_test.go`) | cites `PDL-REFCFG-2026-09-DARWIN-ARM64-M2MAX` via `benchconfig.Stamp` |
+| NFR-014 | `BenchmarkNFR_014_ExtractionPeakMemoryStaysFlatAndBounded` (`pkg/extract/membudget_bench_test.go`) | cites `PDL-REFCFG-2026-09-DARWIN-ARM64-M2MAX` via `benchconfig.Stamp` |
+| NFR-017 | `BenchmarkNFR_017_OpenAndRenderPagePeakMemory` (`pkg/render/pagerender_bench_test.go`) | cites `PDL-REFCFG-2026-09-DARWIN-ARM64-M2MAX` via `benchconfig.Stamp` |
+| NFR-018 | `BenchmarkNFR_018_RenderPageOctetReadBudget` (`pkg/render/octetbudget_bench_test.go`) | cites `PDL-REFCFG-2026-09-DARWIN-ARM64-M2MAX` via `benchconfig.Stamp` |
+| NFR-019 | `TestNFR_019_RasterizerExactRationalDeterminism` (`pkg/render/rasterize_test.go`) | implemented as a determinism **test**, not a benchmark, confirming this table's own earlier judgment call: NFR-019 is not a time/memory bound, so it does not cite the reference config under A-REFPLAT |
+
+Updated 2026-09-19: all M05 (extraction) and M14 (rendering) benchmarks now exist and are enforced by
+`TestNFR_011_BenchmarksCiteReferenceConfig`, which fails the build if any `func Benchmark...` in this
+module omits the `benchconfig.Stamp` citation.
 
 `TestNFR_011_BenchmarksCiteReferenceConfig` (`pkg/benchconfig`) enforces this
 table's claim mechanically: it fails the build if any `func Benchmark...`
