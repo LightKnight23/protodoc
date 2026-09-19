@@ -80,13 +80,16 @@ T-0306 recorded an author-conducted review without fabricating an external audit
 - **Unblocks when:** an outside implementer runs the trial and a dated report records elapsed days and
   the pass/fail result against the rendering conformance corpus.
 
-### T-0351 — NFR-028 second-implementation differential trial (OPEN, awaiting a second implementer)
+### T-0351 — NFR-028 second-implementation differential trial (OPEN, recruiting)
 
 - **Status:** OPEN. Requires a genuinely **second, independently-authored implementation** of
-  container/validate/canon (blocked on the T-0349 funding decision), run through the T-0350 differential
-  harness against the full corpus. No second implementation exists; its results must not be fabricated.
-- **Unblocks when:** the second implementation is commissioned and passes (or has every mismatch triaged)
-  through the T-0350 harness.
+  container/validate/canon, run through the T-0350 differential harness against the full corpus. No
+  second implementation exists; its results must not be fabricated.
+- **Recruitment:** volunteer call posted 2026-09-19 as
+  [LightKnight23/protodoc#1](https://github.com/LightKnight23/protodoc/issues/1), per the T-0349
+  unfunded-open-volunteer-call decision.
+- **Unblocks when:** a volunteer is found, the implementation is built, and it passes (or has every
+  mismatch triaged) through the T-0350 harness.
 
 ### T-0371 — CP-014 IANA media-type / PRONOM format registration (IN PROGRESS)
 
