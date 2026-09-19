@@ -69,6 +69,20 @@ T-0306 recorded an author-conducted review without fabricating an external audit
 - **Unblocks when:** the second implementation is commissioned and passes (or has every mismatch triaged)
   through the T-0350 harness.
 
+### T-0371 — CP-014 IANA media-type / PRONOM format registration (IN PROGRESS)
+
+- **Status:** IN PROGRESS. Repository made public at
+  https://github.com/LightKnight23/protodoc (default branch `001-protodoc-format-core`), with GitHub
+  Pages enabled and verified serving `spec.md` at a stable public URL, so both filings below have a
+  real "published specification" link to cite.
+- **IANA media-type registration:** submitted 2026-09-19 by Eyvar García to media-types@iana.org
+  (subtype `application/vnd.protodoc`, vendor tree per RFC 6838 Section 5.3.4). Awaiting IANA Designated
+  Expert review; no tracking ID assigned yet by IANA as of this entry.
+- **PRONOM format registration:** not yet submitted.
+- **Unblocks when:** IANA approves and publishes the registration (tracking: the published registry
+  entry) AND the PRONOM submission is filed and assigned a PUID. Both dates/reference IDs get recorded
+  here, and TestFR_125_MediaTypeRegistrationOnRecord is written and made to pass, before this task closes.
+
 ## Honesty note
 
 T-0349 above names Eyvar García as decision-maker because that decision was actually made by him on
