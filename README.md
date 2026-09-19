@@ -1,3 +1,5 @@
+![Protodoc](assets/hero-banner.png)
+
 # Protodoc
 
 A document format designed from scratch, plus its reference implementation. Not compatible with OOXML/PDF and
