@@ -71,8 +71,10 @@ func TestTR_012_CLIConformanceSuite(t *testing.T) {
 	check("merge/refused", "REFUSED", runMerge([]string{"a", "b", "c"}, nil).Status)
 	check("merge/usage", "USAGE", runMerge([]string{"a"}, nil).Status)
 
-	// project: OK and USAGE (uses the default canon backend -> empty doc).
-	check("project/ok", "OK", runProject([]string{"f"}, nil).Status)
+	// project: OK and USAGE. project now reads real files (T-0376), so give it a
+	// genuine valid prefix rather than a nonexistent path.
+	projValid := writeValidPrefix(t)
+	check("project/ok", "OK", runProject([]string{projValid, "--format=text"}, nil).Status)
 	check("project/usage", "USAGE", runProject(nil, nil).Status)
 
 	// redact: OK and USAGE.
