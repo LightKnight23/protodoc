@@ -89,3 +89,25 @@ pkg/governance/, pkg/traceability/, pkg/diffconform/, pkg/fuzzmaturity/, pkg/ben
 cmd/                              CLI entry points for the packages above
 go.mod                            Go 1.25 module
 ```
+
+## Acknowledgments
+
+Protodoc went from a rough sketch to a frozen, cross-referenced spec and a working, tested Go
+reference implementation almost entirely through AI-assisted development, and that's worth naming
+plainly rather than glossing over:
+
+- **[Claude Code](https://claude.com/claude-code) and [Anthropic](https://www.anthropic.com/)** —
+  drove the full spec-driven-development pipeline (constitution through analysis), the initial
+  implementation milestone, and the ongoing governance/registration work on this repository.
+- **[Kiro](https://kiro.dev/) (Amazon/AWS's agentic IDE)** — carried the bulk of the reference
+  implementation (milestones M02 through M18) forward after a mid-project handoff, and the project
+  would not be anywhere near this complete without that work.
+- **[AWS](https://aws.amazon.com/)** — the underlying infrastructure Kiro runs on.
+- **[GitHub](https://github.com/)** — hosting, issue tracking, and the `gh` CLI used throughout for
+  repository and registration work.
+- **[The National Archives' PRONOM/DROID team](https://www.nationalarchives.gov.uk/pronom/)** and
+  **[IANA](https://www.iana.org/)** — for the format-registration processes this project is
+  currently going through.
+
+Thank you to everyone building the tools that made a from-scratch, one-person format-design project
+like this one actually tractable.
