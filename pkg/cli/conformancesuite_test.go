@@ -81,7 +81,8 @@ func TestTR_012_CLIConformanceSuite(t *testing.T) {
 
 	// redact: OK and USAGE.
 	RedactRun = func(string, []string) RedactResult { return RedactResult{} }
-	check("redact/ok", "OK", runRedact([]string{"f", "--subtree", "u"}, nil).Status)
+	redactOut := t.TempDir() + "/redact-out.pdl"
+	check("redact/ok", "OK", runRedact([]string{"f", "--subtree", "u", "--out", redactOut}, nil).Status)
 	check("redact/usage", "USAGE", runRedact(nil, nil).Status)
 
 	// publish: OK, INVALID (residue), USAGE.
