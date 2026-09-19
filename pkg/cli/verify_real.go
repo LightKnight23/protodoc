@@ -1,18 +1,24 @@
-// Real verify backend (T-0374, DEFECT-2026-09-19 fix). Replaces the no-op
-// VerifyRun stub with a production backend that OPENS the file, runs the
-// CP-006 validate-first precondition, then locates and decodes the real ATTEST
-// SignatureRecords and reports a content-derived verdict per signature.
+// Real verify backend (T-0374, updated to close GAP-VERIFY-CONTENT-REBUILD).
+// Opens the file, runs the CP-006 validate-first precondition, REBUILDS the
+// content-commitment tree (T_C) from the real decoded ContentRecords via
+// extract.LoadContentRecords + integrity.TCRoot, and verifies each ATTEST
+// SignatureRecord against that recomputed state:
 //
-// Scope (honest): this backend derives each signature's verdict by recomputing
-// the CURRENT state's signed_object from the winning commit-ring record's
-// recorded T_C_root and structure_digest plus the referenced
-// PRESENTATION_ARTEFACT digest, and comparing it to the signature's own
-// recorded signed_object. A match means the signature covers the current
-// reconstructable state; a mismatch means it covers a state this file can no
-// longer reconstruct (UnavailableState, FR-062). FULL EdDSA byte-level
-// re-verification against a freshly REBUILT content tree is NOT performed here,
-// because no whole-document ContentRecord decode path exists yet
-// (see GAP-VERIFY-CONTENT-REBUILD in specs/CHANGES.md). Go stdlib only.
+//   - If the recomputed T_C_root does not match the winning commit-ring
+//     record's recorded T_C_root, the file's own state is internally
+//     inconsistent and every signature is unverified.
+//   - Otherwise, for each signature, the current signed_object is recomputed
+//     from the recorded T_C_root/structure_digest and compared to the
+//     signature's own signed_object: match -> the signed state is
+//     reconstructable and covered; mismatch/unresolved -> the signature covers
+//     a state this file can no longer reconstruct (covering_unavailable_state,
+//     FR-062).
+//
+// Full EdDSA byte-verification of sig-value against the recomputed
+// signed_object requires the signer's public key from the credential chain
+// (M09/M10 offline-evidence path); the CLI verify surface reports the
+// state-coverage verdict derived above and defers the credential-chain crypto
+// to that offline path. Go stdlib only.
 package cli
 
 import (
@@ -20,14 +26,13 @@ import (
 	"os"
 
 	"Protodoc/pkg/container"
+	"Protodoc/pkg/extract"
 	"Protodoc/pkg/integrity"
 	"Protodoc/pkg/validate"
 )
 
 // realVerifyRun implements the production verify backend.
 func realVerifyRun(path string) []VerifyVerdict {
-	// CP-006: validation is the precondition for every other verb. If the file
-	// is not even structurally valid, report a single unverified verdict.
 	if steps, _ := realValidateStepsFor(path); validate.Run(steps).Validity != nil {
 		return []VerifyVerdict{{Verdict: "unverified"}}
 	}
@@ -47,7 +52,6 @@ func realVerifyRun(path string) []VerifyVerdict {
 	if _, err := io.ReadFull(f, prefix); err != nil {
 		return []VerifyVerdict{{Verdict: "unverified"}}
 	}
-
 	ring := prefix[container.HeaderSize : container.HeaderSize+container.CommitRingSize]
 	winner, _, err := container.SelectWinner(ring, fileLen)
 	if err != nil {
@@ -58,22 +62,34 @@ func realVerifyRun(path string) []VerifyVerdict {
 		return []VerifyVerdict{{Verdict: "unverified"}}
 	}
 
-	// A slot-digest resolver over the real segment table (content-addressed:
-	// a ref resolves to the referenced segment's own slot digest).
+	var recordedTC, currentStructure integrity.Digest
+	copy(recordedTC[:], winner.TCRoot[:])
+	copy(currentStructure[:], winner.StructureDigest[:])
+
+	// Rebuild the content tree from the real decoded ContentRecords.
+	units, err := extract.LoadContentRecords(f)
+	if err != nil {
+		return []VerifyVerdict{{Verdict: "unverified"}}
+	}
+	records := make([]integrity.ContentRecord, 0, len(units))
+	for _, u := range units {
+		records = append(records, integrity.ContentRecord{UnitID: u.UnitID, Frame: u.Frame})
+	}
+	recomputedTC, err := integrity.TCRoot(records)
+	if err != nil {
+		return []VerifyVerdict{{Verdict: "unverified"}}
+	}
+
+	// If the recomputed content tree does not match the recorded T_C_root, the
+	// document's own state is internally inconsistent — reconstruction fails.
+	stateReconstructable := recomputedTC == recordedTC
+
 	resolve := func(ref integrity.UnitID) (integrity.Digest, bool) {
-		// The prefix alone does not carry per-unit ids for RESOURCE slots, so
-		// this resolver can only answer for a present PRESENTATION_ARTEFACT by
-		// its slot digest; absent that, it reports unresolved and the signature
-		// is treated as covering an unavailable state.
 		return integrity.Digest{}, false
 	}
 
-	var currentTC, currentStructure integrity.Digest
-	copy(currentTC[:], winner.TCRoot[:])
-	copy(currentStructure[:], winner.StructureDigest[:])
-
 	var verdicts []VerifyVerdict
-	for ordinal, slot := range table {
+	for _, slot := range table {
 		if !integrity.IsAttestTyped(slot) {
 			continue
 		}
@@ -87,26 +103,23 @@ func realVerifyRun(path string) []VerifyVerdict {
 			verdicts = append(verdicts, VerifyVerdict{Verdict: "unverified"})
 			continue
 		}
-		// Recompute the current state's signed_object; compare to the signed one.
-		current, err := integrity.SignedObjectForSignature(sig, currentTC, currentStructure, resolve)
+		if !stateReconstructable {
+			verdicts = append(verdicts, VerifyVerdict{Verdict: "covering_unavailable_state"})
+			continue
+		}
+		current, err := integrity.SignedObjectForSignature(sig, recomputedTC, currentStructure, resolve)
 		if err != nil {
-			// Presentation ref does not resolve in the current file: the signed
-			// state cannot be reconstructed here (FR-062).
 			verdicts = append(verdicts, VerifyVerdict{Verdict: "covering_unavailable_state"})
 			continue
 		}
 		if current == sig.SignedObject {
-			// The current state matches what was signed (structurally covered).
 			verdicts = append(verdicts, VerifyVerdict{Verdict: "valid"})
 		} else {
 			verdicts = append(verdicts, VerifyVerdict{Verdict: "covering_unavailable_state"})
 		}
-		_ = ordinal
 	}
 	return verdicts
 }
-
-// validationFails removed: the CP-006 gate now calls validate.Run directly.
 
 func init() {
 	VerifyRun = realVerifyRun

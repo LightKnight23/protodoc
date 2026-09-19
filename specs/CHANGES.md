@@ -153,18 +153,31 @@ run validation as a precondition. No heuristic recovery, no partial output past 
 failure (CP-006/FR-103).
 
 ### GAP-VERIFY-CONTENT-REBUILD (OPEN) — no whole-document ContentRecord decode path
+### GAP-VERIFY-CONTENT-REBUILD (CLOSED 2026-09-19) — whole-document ContentRecord decode path shipped
 
-While wiring `verify` (T-0374) honestly, a genuine missing capability surfaced: there is no function
+While wiring `verify` (T-0374) honestly, a genuine missing capability surfaced: there was no function
 that reads a whole document's CONTENT segment bodies from disk and decodes each frame into an
-`integrity.ContentRecord` (unit-id + canonical frame bytes). `integrity.TCRoot(records)` can recompute
-the content-commitment tree, but nothing assembles `records` from a real file. Consequently `verify`
-CANNOT yet perform full EdDSA byte-level re-verification against a freshly rebuilt T_C tree. The real
-verify backend therefore derives each signature's verdict from the winning commit-ring record's
-recorded `T_C_root`/`structure_digest` (comparing the recomputed current signed_object to the
-signature's own recorded signed_object: match ⇒ covered/reconstructable, mismatch/unresolved ⇒
-`covering_unavailable_state`). This is content-derived and honest, but it is NOT the full cryptographic
-verification the format ultimately requires. Closing this gap needs a `LoadContentRecords(reader)`
-decode path (own future task); until then `verify` does not run the EdDSA signature check itself.
+`integrity.ContentRecord` (unit-id + canonical frame bytes). `integrity.TCRoot(records)` could recompute
+the content-commitment tree, but nothing assembled `records` from a real file.
+
+**CLOSED.** `extract.LoadContentRecords(r)` + `extract.DecodeContentFrameUnitID` now read every CONTENT
+segment body and decode each content-model frame into its AUTHORED unit-id (the shared tag=1 field,
+document.abnf S2-S5) plus its canonical frame octets, via the bounded streaming Walk + `pdlfmt` TLV
+decode (no font/image/crypto/merge facility, CP-006; a malformed frame is a hard error, FR-103).
+
+Consequences, now shipped:
+- `verify` REBUILDS the content-commitment tree from the real decoded ContentRecords
+  (`integrity.TCRoot`) and compares it to the winning commit-ring record's recorded `T_C_root` to decide
+  reconstructability; a document whose real content does not hash to its recorded root no longer verifies
+  as covered. A CLI test proves the recomputed tree over loaded records equals the genuine tree.
+- `project` and `redact` now key constructs by the AUTHORED unit-id decoded from each frame, not a
+  slot-digest surrogate.
+
+Remaining honest scope (narrower, its own future concern, NOT this gap): full EdDSA byte-verification of
+`sig-value` against the recomputed signed_object needs the signer's public key from the credential chain
+(the M09/M10 offline-evidence path). The CLI verify surface reports the state-coverage verdict derived
+from the recomputed tree and defers that credential-chain crypto to the offline-evidence path; it does
+not fabricate a cryptographic pass.
 
 ## Honesty note
 
