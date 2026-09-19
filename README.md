@@ -86,15 +86,12 @@ cmd/                              CLI entry points for the packages above
 go.mod                            Go 1.25 module
 ```
 
-## For another LLM or agent picking this up
+## What's left
 
-Read [`CLAUDE.md`](CLAUDE.md) first, specifically its "Phase 6 status" section — it has the exact, git-verified
-task completion state (not any prior session's self-report), the real topological build order, and the
-discipline for continuing safely (sequential implementation, one commit per task, honesty about tasks no agent
-can complete, constitution principles that bind every line of code). This README is the orientation; `CLAUDE.md`
-is the operating manual.
-
-Two things worth internalizing before writing anything: (1) an earlier automated pass over-reported its own
-completion — always verify against `git log`'s `Refs:` trailers, never trust a task list from conversation
-memory; (2) real Go code has compile-time coupling that markdown specs don't, so implement tasks strictly
-sequentially, never in parallel across shared packages.
+All implementation work is done — M01 through M18, every task, and no code-writing tasks remain anywhere in
+the project. The only open items are M19's 9 real-world actions that no amount of code can satisfy: two
+external-implementer trials, Eyvar's personal governance sign-offs, a funding decision for a second
+independent implementation, commissioning that implementation, and the IANA/PRONOM format registration
+filings (in progress as of this writing). See [`CLAUDE.md`](CLAUDE.md)'s "Phase 6 status" section for the
+exact, git-verified breakdown of which of those 9 remain and why each one specifically requires a human,
+not an agent.
