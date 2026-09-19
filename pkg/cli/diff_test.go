@@ -29,3 +29,44 @@ func TestTR_002_DiffVerbConstructLevel(t *testing.T) {
 		t.Errorf("one-operand diff: status=%s, want USAGE", r.Status)
 	}
 }
+
+// TestTR_012_DiffVerbPayloadShape is T-0389's named test (DEFECT-2026-09-19b).
+// cli.md S6 requires diff's stdout to carry {"identical", "added", "removed",
+// "changed"}; the payload previously carried only {"change_count",
+// "changed_constructs"}, with no "identical" field at all.
+func TestTR_012_DiffVerbPayloadShape(t *testing.T) {
+	orig := DiffRun
+	defer func() { DiffRun = orig }()
+
+	// Identical: zero changes -> identical:true, all three lists empty.
+	DiffRun = func(a, b string) ([]string, error) { return nil, nil }
+	res := runDiff([]string{"a.pdl", "b.pdl"}, nil)
+	if res.Extra["identical"] != true {
+		t.Errorf("identical files: identical=%v, want true", res.Extra["identical"])
+	}
+	if len(res.Extra["added"].([]string)) != 0 || len(res.Extra["removed"].([]string)) != 0 || len(res.Extra["changed"].([]string)) != 0 {
+		t.Errorf("identical files: added/removed/changed must all be empty, got %+v", res.Extra)
+	}
+
+	// Added/removed/changed classified from the tagged description prefixes
+	// realDiffRun produces.
+	DiffRun = func(a, b string) ([]string, error) {
+		return []string{"added@ordinal-3", "removed@ordinal-1", "changed@ordinal-2 (aa->bb)"}, nil
+	}
+	res = runDiff([]string{"a.pdl", "b.pdl"}, nil)
+	if res.Extra["identical"] != false {
+		t.Errorf("differing files: identical=%v, want false", res.Extra["identical"])
+	}
+	added := res.Extra["added"].([]string)
+	removed := res.Extra["removed"].([]string)
+	changedList := res.Extra["changed"].([]string)
+	if len(added) != 1 || added[0] != "added@ordinal-3" {
+		t.Errorf("added = %v, want exactly [added@ordinal-3]", added)
+	}
+	if len(removed) != 1 || removed[0] != "removed@ordinal-1" {
+		t.Errorf("removed = %v, want exactly [removed@ordinal-1]", removed)
+	}
+	if len(changedList) != 1 || changedList[0] != "changed@ordinal-2 (aa->bb)" {
+		t.Errorf("changed = %v, want exactly [changed@ordinal-2 (aa->bb)]", changedList)
+	}
+}
