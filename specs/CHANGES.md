@@ -152,6 +152,20 @@ file and accepts a genuine sample. `validate` is done first because CP-006 requi
 run validation as a precondition. No heuristic recovery, no partial output past the first structural
 failure (CP-006/FR-103).
 
+### GAP-VERIFY-CONTENT-REBUILD (OPEN) — no whole-document ContentRecord decode path
+
+While wiring `verify` (T-0374) honestly, a genuine missing capability surfaced: there is no function
+that reads a whole document's CONTENT segment bodies from disk and decodes each frame into an
+`integrity.ContentRecord` (unit-id + canonical frame bytes). `integrity.TCRoot(records)` can recompute
+the content-commitment tree, but nothing assembles `records` from a real file. Consequently `verify`
+CANNOT yet perform full EdDSA byte-level re-verification against a freshly rebuilt T_C tree. The real
+verify backend therefore derives each signature's verdict from the winning commit-ring record's
+recorded `T_C_root`/`structure_digest` (comparing the recomputed current signed_object to the
+signature's own recorded signed_object: match ⇒ covered/reconstructable, mismatch/unresolved ⇒
+`covering_unavailable_state`). This is content-derived and honest, but it is NOT the full cryptographic
+verification the format ultimately requires. Closing this gap needs a `LoadContentRecords(reader)`
+decode path (own future task); until then `verify` does not run the EdDSA signature check itself.
+
 ## Honesty note
 
 T-0349, T-0356, and plan.md's Conflict 5 above name Eyvar García as decision-maker because those
