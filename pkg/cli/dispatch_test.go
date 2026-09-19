@@ -105,12 +105,13 @@ func TestTR_012_DispatchGlobalHelpAndVersion(t *testing.T) {
 func TestTR_012_DispatchEnvelopeIsSingleJSONObject(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Dispatch([]string{"validate", "somefile.pdl", "--json"}, &stdout, &stderr)
-	// validate is now wired to the M07 pipeline (T-0327); with the default
-	// (empty) step set the pipeline reports a structurally valid document, so
-	// the invocation resolves to OK. The point of this test is the single
-	// JSON envelope shape, which holds regardless of the resolved status.
-	if code != exitOK {
-		t.Fatalf("exit code = %d, want %d (OK: default steps pass)", code, exitOK)
+	// validate is now wired to the real decode chain (T-0373): an absent file
+	// resolves to INVALID with a real finding. The point of THIS test is the
+	// single-JSON-envelope shape, which holds regardless of the resolved
+	// status, so we assert the shape and a non-crash exit code rather than a
+	// specific verdict.
+	if code != int(StatusInvalid.Code()) {
+		t.Fatalf("exit code = %d, want %d (INVALID: absent file, real decode)", code, StatusInvalid.Code())
 	}
 
 	var obj map[string]any
