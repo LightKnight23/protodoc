@@ -125,7 +125,9 @@ T-0306 recorded an author-conducted review without fabricating an external audit
 
 ## DEFECT-2026-09-19 — CLI verbs never wired to real decode chain (found post-M18)
 
-**Severity:** high (correctness). **Found:** 2026-09-19, external review. **Status:** IN PROGRESS.
+**Severity:** high (correctness). **Found:** 2026-09-19, external review. **Status:** RESOLVED 2026-09-19
+(all 10 stub verbs wired, T-0373..T-0382, verified against real commits and a rebuilt binary that
+correctly rejects a nonexistent/garbage/truncated file and accepts a genuine sample).
 
 M18 (CLI Surface) was marked 17/17 with all tests green, but the compiled `protodoc` binary does not
 process real files for 10 of its 11 verbs. Reproduction (current tree, before fix):
@@ -152,7 +154,6 @@ file and accepts a genuine sample. `validate` is done first because CP-006 requi
 run validation as a precondition. No heuristic recovery, no partial output past the first structural
 failure (CP-006/FR-103).
 
-### GAP-VERIFY-CONTENT-REBUILD (OPEN) — no whole-document ContentRecord decode path
 ### GAP-VERIFY-CONTENT-REBUILD (CLOSED 2026-09-19) — whole-document ContentRecord decode path shipped
 
 While wiring `verify` (T-0374) honestly, a genuine missing capability surfaced: there was no function
