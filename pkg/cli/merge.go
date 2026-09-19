@@ -21,8 +21,15 @@ type MergeOutcome struct {
 	Kind MergeOutcomeKind
 	// Conflict values (for MergeConflict): both source values named.
 	ValueA, ValueB string
-	// Refusal condition (for MergeRefused), e.g. "CON-024" / "CON-025".
+	// Refusal condition (for MergeRefused), e.g. "CON-024" / "CON-025". Never
+	// used for an input-read failure -- that is Err (DEFECT-2026-09-19b/T-0384:
+	// REFUSED is reserved for a genuine policy refusal on a structurally-fine
+	// input, per cli.md's own exit-code table; a missing/unreadable input is
+	// INVALID, never REFUSED).
 	RefusedCondition string
+	// Err is set when an input (base/a/b) could not be opened, validated or
+	// decoded. Checked before Kind.
+	Err error
 }
 
 // MergeRun is the injectable merge classifier backend (M13 DP-015).
@@ -39,6 +46,11 @@ func runMerge(args []string, _ io.Writer) Result {
 		})
 	}
 	out := MergeRun(args[0], args[1], args[2])
+	if out.Err != nil {
+		return StatusInvalid.ToResult(Result{
+			Findings: []Finding{{RuleID: "TR-012", Message: "merge failed: " + out.Err.Error()}},
+		})
+	}
 	switch out.Kind {
 	case MergeConflict:
 		return StatusInvalid.ToResult(Result{

@@ -79,10 +79,12 @@ func TestTR_012_MergeVerbReadsRealFiles(t *testing.T) {
 		t.Errorf("no-op merge: status=%s, want OK", res.Status)
 	}
 
-	// Absent input -> REFUSED (CP-006).
+	// Absent input -> INVALID, never REFUSED (DEFECT-2026-09-19b/T-0384:
+	// REFUSED is reserved for a genuine policy refusal on an otherwise-fine
+	// input; cli.md does not list exit code 6 among merge's used codes at all).
 	res = runMerge([]string{base, sideA, filepath.Join(t.TempDir(), "absent.pdl")}, nil)
-	if res.Status != "REFUSED" {
-		t.Errorf("absent input: status=%s, want REFUSED", res.Status)
+	if res.Status != "INVALID" {
+		t.Errorf("absent input: status=%s, want INVALID", res.Status)
 	}
 
 	if r := runMerge([]string{base, sideA}, nil); r.Status != "USAGE" {

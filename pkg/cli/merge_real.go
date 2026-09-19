@@ -9,11 +9,16 @@ package cli
 
 import (
 	"encoding/hex"
+	"errors"
 	"os"
 
 	"Protodoc/pkg/container"
 	"Protodoc/pkg/validate"
 )
+
+// errMergeInputUnreadable is returned when one of merge's three inputs could
+// not be opened, validated, or decoded.
+var errMergeInputUnreadable = errors.New("merge input could not be opened, validated, or decoded")
 
 // mergeState is the real decoded state a merge needs from one input's prefix.
 type mergeState struct {
@@ -56,7 +61,11 @@ func loadMergeState(path string) mergeState {
 func realMergeRun(base, a, b string) MergeOutcome {
 	bs, as, bbs := loadMergeState(base), loadMergeState(a), loadMergeState(b)
 	if !bs.ok || !as.ok || !bbs.ok {
-		return MergeOutcome{Kind: MergeRefused, RefusedCondition: "CP-006"}
+		// A missing/unreadable/malformed input is INVALID, never REFUSED
+		// (DEFECT-2026-09-19b/T-0384): REFUSED is reserved for a genuine policy
+		// refusal on an otherwise-fine input (CON-024/CON-025/FR-024), and
+		// cli.md does not even list exit code 6 among merge's used codes.
+		return MergeOutcome{Err: errMergeInputUnreadable}
 	}
 
 	// CON-025: history-mode mismatch between the two sides is refused.
