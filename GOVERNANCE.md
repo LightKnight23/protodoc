@@ -25,7 +25,14 @@ the normative text; this section exists only to point at it so a reader of
 this file does not have to already know to look for a separate file.
 
 The licence grant does not cover this repository's reference-implementation
-source code, which carries its own licence once code exists (phase 6).
+source code (pkg/, cmd/), which is separately licensed under LICENSE-CODE:
+the Apache License, Version 2.0, decided 2026-09-19. Apache 2.0 was chosen
+over MIT/BSD to carry the same patent-grant-with-litigation-termination
+posture the specification licence already establishes above, and over a
+copyleft licence (e.g. MPL-2.0, AGPL-3.0) because broad, unencumbered
+implementability is this project's explicit priority (CP-003's two-
+independent-implementation requirement is easier to satisfy the more
+permissively the reference implementation itself is licensed).
 
 ## Named Steward
 

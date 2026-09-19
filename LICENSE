@@ -7,9 +7,9 @@ This licence covers the Protodoc specification text and reference materials
 in this repository under specs/001-protodoc-format-core/ and
 .specify/memory/constitution.md (the "Specification"), and, separately, the
 patent claims described in Section 2 below. It does not cover this
-repository's reference-implementation source code, which is licensed
-separately (see the licence header in the reference-implementation
-directories once code exists, per CLAUDE.md's phase-6 gate).
+repository's reference-implementation source code (pkg/, cmd/), which is
+licensed separately under LICENSE-CODE (Apache License 2.0), decided
+2026-09-19.
 
 1. Copyright licence (Specification text)
 
