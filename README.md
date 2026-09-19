@@ -47,6 +47,7 @@ See [`specs/001-protodoc-format-core/analysis.md`](specs/001-protodoc-format-cor
 | [`specs/001-protodoc-format-core/tasks.md`](specs/001-protodoc-format-core/tasks.md) | 19 milestones, 372 implementation tasks |
 | [`specs/001-protodoc-format-core/analysis.md`](specs/001-protodoc-format-core/analysis.md) | Phase 5 cross-artifact consistency, gate PASSES |
 | [`scripts/extract_milestone_tasks.py`](scripts/extract_milestone_tasks.py) | Regenerates the per-milestone task breakdown + real topological build order from `tasks.md` |
+| [`docs/cli-usage-guide.md`](docs/cli-usage-guide.md) | How to build and run the `protodoc` CLI, with known-issue caveats |
 
 ## The architecture in one paragraph
 
