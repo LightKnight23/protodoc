@@ -3907,6 +3907,16 @@ cmd/protodoc wraps every package above it into the 11 TR-012 verbs and is the fi
 | T-0339 | CLI requirement-to-verb traceability table | TR-012 | T-0327, T-0329, T-0330, T-0331, T-0332, T-0333, T-0334, T-0335, T-0336, T-0337, T-0338 | clio | `TestTR_012_TraceabilityTableMatchesDispatch` (unit) |
 | T-0340 | End-to-end CLI conformance suite | TR-012 | T-0326, T-0327, T-0328, T-0329, T-0330, T-0331, T-0332, T-0333, T-0334, T-0335, T-0336, T-0337, T-0338 | momus | `TestTR_012_CLIConformanceSuite` (conformance) |
 | T-0341 | Conditional-replacement write flag for mutating verbs | TR-010 | T-0325, T-0044 | hephaestus | `TestTR_010_ConditionalWriteRefusesOnMismatch` (integration) |
+| T-0373 | DEFECT-2026-09-19 fix: wire validate verb to real file decode chain | TR-012, CP-006 | T-0327 | hephaestus | `TestTR_012_ValidateVerbRejectsGarbageFileAcceptsSample` (integration) |
+| T-0374 | DEFECT-2026-09-19 fix: wire verify verb to real decode chain | TR-012 | T-0331, T-0373 | hephaestus | `TestTR_012_VerifyVerbReadsRealFile` (integration) |
+| T-0375 | DEFECT-2026-09-19 fix: wire extract verb to real decode chain | TR-012 | T-0330, T-0373 | hephaestus | `TestTR_012_ExtractVerbReadsRealFile` (integration) |
+| T-0376 | DEFECT-2026-09-19 fix: wire project verb to real decode chain | TR-012, TR-004 | T-0334, T-0373 | hephaestus | `TestTR_012_ProjectVerbReadsRealFile` (integration) |
+| T-0377 | DEFECT-2026-09-19 fix: wire diff verb to real byte-level walk | TR-012, TR-002 | T-0332, T-0373 | hephaestus | `TestTR_012_DiffVerbReadsRealFiles` (integration) |
+| T-0378 | DEFECT-2026-09-19 fix: wire merge verb to real decode chain | TR-012, TR-003 | T-0333, T-0373 | hephaestus | `TestTR_012_MergeVerbReadsRealFiles` (integration) |
+| T-0379 | DEFECT-2026-09-19 fix: wire redact verb to real decode chain | TR-012 | T-0335, T-0373 | hephaestus | `TestTR_012_RedactVerbReadsRealFile` (integration) |
+| T-0380 | DEFECT-2026-09-19 fix: wire publish verb to real decode chain | TR-012 | T-0336, T-0373 | hephaestus | `TestTR_012_PublishVerbReadsRealFile` (integration) |
+| T-0381 | DEFECT-2026-09-19 fix: wire sign verb to real decode chain | TR-012 | T-0337, T-0373 | hephaestus | `TestTR_012_SignVerbReadsRealFile` (integration) |
+| T-0382 | DEFECT-2026-09-19 fix: wire migrate verb to real decode chain | TR-012 | T-0338, T-0373 | hephaestus | `TestTR_012_MigrateVerbReadsRealFile` (integration) |
 
 **T-0325** CLI command dispatch & global flags framework
 

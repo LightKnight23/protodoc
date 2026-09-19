@@ -123,6 +123,35 @@ T-0306 recorded an author-conducted review without fabricating an external audit
   entry) AND PRONOM assigns a PUID. Both dates/reference IDs get recorded here, and
   TestFR_125_MediaTypeRegistrationOnRecord is written and made to pass, before this task closes.
 
+## DEFECT-2026-09-19 — CLI verbs never wired to real decode chain (found post-M18)
+
+**Severity:** high (correctness). **Found:** 2026-09-19, external review. **Status:** IN PROGRESS.
+
+M18 (CLI Surface) was marked 17/17 with all tests green, but the compiled `protodoc` binary does not
+process real files for 10 of its 11 verbs. Reproduction (current tree, before fix):
+
+```
+$ go build -o /tmp/protodoc ./cmd/protodoc
+$ /tmp/protodoc validate /tmp/this-file-does-not-exist-at-all.pdl
+{"checks":0,"exit_code":0,"findings":[],"status":"OK","verb":"validate"}
+```
+
+A file that does not exist reports OK. **Root cause:** every verb except `inspect` routes through a
+package-level "injectable backend" variable (`ValidateStepsFor`, `ProjectStateFor`, `ExtractRun`,
+`VerifyRun`, `DiffRun`, `MergeRun`, `RedactRun`, `PublishRun`, `SignRun`, `MigrateRun`) that DEFAULTS to
+a no-op stub. The stubs are legitimate test-doubles, but the production wiring that replaces them with
+the real M01–M17 decode chain was never written, and `cmd/protodoc/main.go` imports only `pkg/cli`.
+`go test ./...` stayed green because the verb tests exercise the stubs directly, never real file I/O.
+Only `pkg/cli/inspect.go` genuinely opens the file and decodes real bytes.
+
+This defect is NOT covered by any T-NNN task in the original spine (all 17 M18 tasks tested the stub
+seam, not the production seam). It is fixed under new numbered tasks **T-0373..T-0382** (one per stub
+verb) added to `tasks.md`'s M18 section, one verb per commit, each wiring the stub to the real decode
+chain (following `inspect.go`'s pattern) plus a real test proving it rejects a garbage/truncated/absent
+file and accepts a genuine sample. `validate` is done first because CP-006 requires every other verb to
+run validation as a precondition. No heuristic recovery, no partial output past the first structural
+failure (CP-006/FR-103).
+
 ## Honesty note
 
 T-0349, T-0356, and plan.md's Conflict 5 above name Eyvar García as decision-maker because those
