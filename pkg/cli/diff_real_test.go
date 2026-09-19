@@ -30,11 +30,11 @@ func TestTR_012_DiffVerbReadsRealFiles(t *testing.T) {
 		t.Errorf("documents differing in content must report changes, got 0")
 	}
 
-	// (3) Absent input -> diff-error sentinel, not a silent empty diff.
+	// (3) Absent input -> INVALID (the verb refuses rather than reporting a
+	// spurious no-difference OK).
 	res = runDiff([]string{a, filepath.Join(t.TempDir(), "absent.pdl")}, nil)
-	changed := res.Extra["changed_constructs"].([]string)
-	if len(changed) != 1 || changed[0][:10] != "diff-error" {
-		t.Errorf("absent input must yield a diff-error sentinel, got %v", changed)
+	if res.Status != "INVALID" {
+		t.Errorf("absent input must yield INVALID, got %s", res.Status)
 	}
 
 	// Missing operand -> USAGE.

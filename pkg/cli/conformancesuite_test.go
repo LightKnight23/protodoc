@@ -54,7 +54,7 @@ func TestTR_012_CLIConformanceSuite(t *testing.T) {
 	check("verify/usage", "USAGE", runVerify(nil, nil).Status)
 
 	// diff: OK and USAGE.
-	DiffRun = func(string, string) []string { return nil }
+	DiffRun = func(string, string) ([]string, error) { return nil, nil }
 	check("diff/ok", "OK", runDiff([]string{"a", "b"}, nil).Status)
 	check("diff/usage", "USAGE", runDiff([]string{"a"}, nil).Status)
 

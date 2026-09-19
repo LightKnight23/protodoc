@@ -9,8 +9,8 @@ func TestTR_002_DiffVerbConstructLevel(t *testing.T) {
 	orig := DiffRun
 	defer func() { DiffRun = orig }()
 
-	DiffRun = func(a, b string) []string {
-		return []string{"annotation:ann-1 changed", "run:run-7 moved"}
+	DiffRun = func(a, b string) ([]string, error) {
+		return []string{"annotation:ann-1 changed", "run:run-7 moved"}, nil
 	}
 	res := runDiff([]string{"a.pdl", "b.pdl"}, nil)
 	if res.Status != "OK" {

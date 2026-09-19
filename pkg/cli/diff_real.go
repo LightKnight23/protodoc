@@ -46,14 +46,16 @@ func contentDigests(path string) (map[uint64][32]byte, error) {
 
 // realDiffRun implements the production diff backend. It reports one changed-
 // construct description per CONTENT ordinal whose slot digest differs (or is
-// present in only one document); identical constructs are omitted.
-func realDiffRun(pathA, pathB string) []string {
+// present in only one document); identical constructs are omitted. It returns
+// an error if either input fails to validate/decode.
+func realDiffRun(pathA, pathB string) ([]string, error) {
 	da, errA := contentDigests(pathA)
 	db, errB := contentDigests(pathB)
-	if errA != nil || errB != nil {
-		// A file that will not validate/decode yields a single sentinel change
-		// rather than a silent empty (no-difference) result.
-		return []string{"diff-error: one or both inputs failed to validate/decode"}
+	if errA != nil {
+		return nil, errA
+	}
+	if errB != nil {
+		return nil, errB
 	}
 
 	seen := map[uint64]bool{}
@@ -76,7 +78,7 @@ func realDiffRun(pathA, pathB string) []string {
 			changed = append(changed, "added@ordinal-"+itoaCLI(int(ord)))
 		}
 	}
-	return changed
+	return changed, nil
 }
 
 func init() {
