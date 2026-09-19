@@ -65,26 +65,18 @@ the edit against the opened state, and calls `Write(openedToken, newBytes)`;
 a conflict is surfaced to the user naming the current holder, never resolved
 by silent overwrite.
 
-## plan.md gap (still open as of 2026-09-19 -- flagged for an Eyvar-approved amendment)
+## plan.md gap (RESOLVED 2026-09-19)
 
-The frozen `plan.md` describes **no** storage-backend abstraction: TR-010 is
-repeatedly folded into FR-117's commit-ring discussion, so the plan as
-written has no place for the conditional-write obligation that TR-010
-actually states. M02 (T-0044/T-0045) implements the minimal missing piece
-(`ConditionalWriter` + the local-filesystem reference adapter) so downstream
-milestones are not blocked, but this is a genuine gap between the frozen plan
-and the implemented code.
+The frozen `plan.md` described **no** storage-backend abstraction as originally written: TR-010 was
+repeatedly folded into FR-117's commit-ring discussion, so the plan had no place for the
+conditional-write obligation that TR-010 actually states. M02 (T-0044/T-0045) implemented the missing
+piece anyway (`ConditionalWriter` + the local-filesystem reference adapter) so downstream milestones
+were not blocked, and M18's CLI surface (T-0341, `--if-match`) was built on top of it before the
+amendment landed -- a genuine gap between the frozen plan and the implemented code that this note
+originally flagged.
 
-**Status update:** this note originally recommended the plan.md amendment
-land before M18's CLI surface was built on top of `ConditionalWriter`. M18
-is now complete (T-0341 wires `--if-match` conditional writes into the CLI),
-and the amendment was never recorded -- `plan.md`'s architecture sections
-still describe no storage-backend abstraction. This is a real, still-open
-governance gap, surfaced honestly rather than silently closed: the code and
-its tests (`TestTR_010_ConditionalWriterInterfaceContract`,
-`TestTR_010_ConditionalWriteRefusalNamesCurrentHolder`, and the others cited
-in `analysis.md`'s TR-010 row) are correct and pass, but `plan.md` itself has
-not been updated to document the abstraction it depends on. It should still
-be closed by an **Eyvar-approved plan.md amendment** adding the
-storage-backend abstraction to the architecture. This note records the gap;
-it does not itself amend the frozen plan.
+**Resolution:** Eyvar approved `plan.md` Section 9's new Conflict 5, 2026-09-19, formally adopting
+`ledger.ConditionalWriter` as the architecture's storage-backend abstraction for TR-010. `plan.md` now
+documents the mechanism this note describes; see `plan.md` Section 9 Conflict 5 for the approved text
+and `specs/CHANGES.md` for the structured entry. This note is retained as the original design
+rationale, not superseded by the amendment.

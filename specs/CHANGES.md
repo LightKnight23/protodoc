@@ -37,6 +37,21 @@ T-0306 recorded an author-conducted review without fabricating an external audit
   proceeding without it satisfied.
 - Mirrored in plan.md Section 8's risk row for this item.
 
+### plan.md Conflict 5 — TR-010 storage-backend abstraction adopted (RESOLVED)
+
+- **Date:** 2026-09-19
+- **Decision-maker:** Eyvar García
+- **Decision:** adopted the already-implemented `ledger.ConditionalWriter` interface
+  (`pkg/ledger/conditionalwriter.go`, T-0044/T-0045) as `plan.md`'s architecture-level answer to TR-010.
+  The frozen plan as originally written described no storage-backend abstraction; M02 implemented one
+  anyway and M18's CLI (T-0341) built on top of it before the plan document was updated to match. This
+  decision closes that gap by formally recording the mechanism in `plan.md` Section 9 Conflict 5.
+- **Rationale:** the code was already correct, tested, and in production use (`TestTR_010_
+  ConditionalWriterInterfaceContract`, `TestTR_010_ConditionalWriteRefusalNamesCurrentHolder`,
+  `TestTR_010_ConditionalWriteRefusesOnMismatch`); this is a documentation/architecture-record fix, not
+  a design or wire-format change.
+- Mirrored in `plan.md` Section 9 Conflict 5 and `docs/ledger-conditional-write-design-note.md`.
+
 ### T-0356 — CON-026 licence/governance gate approval (OPEN, awaiting Eyvar García)
 
 - **Status:** OPEN. The draft `LICENSE` and `GOVERNANCE.md` (T-0355) exist, but CON-026's "on record

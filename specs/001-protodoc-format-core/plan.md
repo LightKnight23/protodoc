@@ -644,7 +644,48 @@ This exception is **proposed here, not approved**. Per the constitution's amendm
 
 **Proposed resolution.** No further architectural mitigation is available for the shaping share without reopening CQ-006, which this phase has no authority to do. Recommend the day count be revisited specifically for shaping, as an explicit scope decision under CP-002 (the precedent clarify.md's AD-002 already sets: "the correction is a scope decision under CP-002, not a silent re-tiering"), rather than treating the whole rendering role's budget as generally at risk. **Approval needed**: Eyvar, or Eyvar and themis together, to make the scope decision.
 
-### Conflict 5: FR-055's read-count clause versus its octet-ceiling clause
+### Conflict 5 (RESOLVED 2026-09-19): TR-010's storage-backend conditional-write abstraction
+
+**Conflict.** TR-010 requires the reference tooling to write conditionally on an expected prior state
+when saving to storage that may be written concurrently by another writer (an object bucket, a shared
+filesystem), and to refuse, naming the current holder, when that condition fails. This is a property of
+the writing *tool* and the *external store*, not of the file format itself. The frozen `plan.md` as
+written describes no such storage-backend abstraction: every mention of write-safety in this document
+(Section 1's architecture overview, Section 4's interfaces, Section 8's risk table) folds TR-010 into
+FR-117's file-internal 7-slot commit ring, which solves a different problem (detecting a torn write
+within one file, not concurrent whole-file replacement across writers sharing an external store). M02
+(T-0044/T-0045) implemented the missing piece anyway, so downstream milestones were not blocked on this
+ruling, and M18's CLI surface (T-0341, `--if-match`) has since been built on top of it. The architecture
+document itself was never updated to match, which is the actual gap this conflict records (see
+`docs/ledger-conditional-write-design-note.md` for the original finding).
+
+**Proposed resolution.** Adopt the already-implemented `ledger.ConditionalWriter` interface
+(`pkg/ledger/conditionalwriter.go`) as this architecture's storage-backend abstraction for TR-010:
+
+- `ConditionalWriter` is a two-method interface (`Write(expected Token, newContent []byte) (Token, error)`,
+  `CurrentToken() (Token, error)`) over an opaque `Token` (an ETag/generation-number analogue; the empty
+  token means "object does not exist"). `Write` replaces an object's whole content only if `expected`
+  matches the object's current token; on mismatch it makes no change and returns a
+  `*ConditionalWriteConflict` naming the current holder's token, satisfying TR-010's refusal-naming
+  requirement directly.
+- `LocalFileConditionalWriter` is the reference adapter over a local filesystem path (token = SHA-256 of
+  current content, write via temp-file-and-rename); a real deployment supplies a bucket-backed adapter
+  using the store's native ETag/generation-number token instead.
+- This sits alongside, and is independent of, FR-117's file-internal commit ring: a CLI commit to shared
+  storage reads the current token, performs the edit against the opened state, and calls
+  `Write(openedToken, newBytes)`, with any conflict surfaced to the user rather than resolved by silent
+  overwrite.
+
+This amendment does not change any wire format, ceiling, or requirement text -- it documents, in the
+architecture, a mechanism that already exists in code and is already covered by
+`TestTR_010_ConditionalWriterInterfaceContract`, `TestTR_010_ConditionalWriteRefusalNamesCurrentHolder`,
+and `TestTR_010_ConditionalWriteRefusesOnMismatch` (see `analysis.md`'s TR-010 row).
+
+**Resolution: APPROVED by Eyvar García, 2026-09-19.** `ledger.ConditionalWriter` is adopted as this
+architecture's storage-backend abstraction for TR-010, retroactively closing the gap between this
+document and the already-shipped implementation.
+
+### Conflict 6: FR-055's read-count clause versus its octet-ceiling clause
 
 **Conflict.** FR-055's text (spec.md line 481) states one sentence covering both a read-count ceiling ("locate and read... using at most 3 sequential dependent reads") and an octet ceiling ("no more than... beyond the unit itself"). A reading that lets the octet clause's "beyond the unit itself" exclusion also narrow the read-count clause can undercount the hop budget by one: at the stated fanout, reaching the leaf that names a unit and then reading the unit itself could plausibly be read as 4 hops, not 3.
 

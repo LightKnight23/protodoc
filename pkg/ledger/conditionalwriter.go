@@ -8,11 +8,9 @@
 // writers sharing an external store. See docs (T-0049) for the full
 // FR-117-vs-TR-010 distinction.
 //
-// NOTE (raised for a plan.md amendment, see T-0049): the frozen plan.md
-// describes no storage-backend abstraction; TR-010 is repeatedly conflated
-// with FR-117 there. This file implements the minimal missing piece; the
-// gap should be closed by an Eyvar-approved plan.md amendment before M18's
-// CLI surface is built on top of it.
+// This is plan.md Section 9 Conflict 5's approved storage-backend
+// abstraction for TR-010 (Eyvar García, 2026-09-19); see T-0049's design
+// note for the full FR-117-vs-TR-010 rationale.
 package ledger
 
 import (
