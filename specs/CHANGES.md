@@ -78,10 +78,16 @@ T-0306 recorded an author-conducted review without fabricating an external audit
 - **IANA media-type registration:** submitted 2026-09-19 by Eyvar García to media-types@iana.org
   (subtype `application/vnd.protodoc`, vendor tree per RFC 6838 Section 5.3.4). Awaiting IANA Designated
   Expert review; no tracking ID assigned yet by IANA as of this entry.
-- **PRONOM format registration:** not yet submitted.
+- **PRONOM format registration:** submitted 2026-09-19 by Eyvar García to PRONOM@nationalarchives.gov.uk,
+  via the official PRONOM Submission template (docx), with a real, decoder-valid, minimal `protodoc-sample.pdl`
+  attached for signature testing. Signature independently verified beforehand with The National Archives'
+  own DROID tooling: `sigtool` byte-match (1/1 hit on the sample, 0/1 on a control file) and a full DROID
+  identification run using a locally patched copy of the real DROID_SignatureFile_V119.xml (correctly
+  identified the sample, correctly left the control file unidentified as Protodoc). Awaiting PRONOM team
+  review; no PUID assigned yet as of this entry.
 - **Unblocks when:** IANA approves and publishes the registration (tracking: the published registry
-  entry) AND the PRONOM submission is filed and assigned a PUID. Both dates/reference IDs get recorded
-  here, and TestFR_125_MediaTypeRegistrationOnRecord is written and made to pass, before this task closes.
+  entry) AND PRONOM assigns a PUID. Both dates/reference IDs get recorded here, and
+  TestFR_125_MediaTypeRegistrationOnRecord is written and made to pass, before this task closes.
 
 ## Honesty note
 
