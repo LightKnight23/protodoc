@@ -15,10 +15,11 @@ import (
 func TestTR_012_PublishVerbReadsRealFile(t *testing.T) {
 	outPath := func() string { return filepath.Join(t.TempDir(), "out.pdl") }
 
-	// (1) Absent file -> INVALID.
+	// (1) Absent file -> USAGE (DEFECT-2026-09-19b/T-0390: an unreadable path
+	// is USAGE, not INVALID).
 	res := runPublish([]string{filepath.Join(t.TempDir(), "absent.pdl"), "--out", outPath()}, nil)
-	if res.Status != "INVALID" {
-		t.Errorf("absent file: status=%s, want INVALID", res.Status)
+	if res.Status != "USAGE" {
+		t.Errorf("absent file: status=%s, want USAGE", res.Status)
 	}
 
 	// (2) A real document with CONTENT segments -> OK, zero residue, custody OK,

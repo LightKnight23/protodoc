@@ -1,6 +1,9 @@
 package cli
 
-import "io"
+import (
+	"errors"
+	"io"
+)
 
 // merge verb wiring (T-0333, TR-003). `protodoc merge` runs M13's DP-015 merge
 // classifier, surfacing a genuine R2/R3 conflict as CONFLICT (naming both
@@ -47,6 +50,11 @@ func runMerge(args []string, _ io.Writer) Result {
 	}
 	out := MergeRun(args[0], args[1], args[2])
 	if out.Err != nil {
+		if errors.Is(out.Err, ErrFileUnreadable) {
+			return StatusUsage.ToResult(Result{
+				Findings: []Finding{{RuleID: "TR-012", Message: "merge: " + out.Err.Error()}},
+			})
+		}
 		return StatusInvalid.ToResult(Result{
 			Findings: []Finding{{RuleID: "TR-012", Message: "merge failed: " + out.Err.Error()}},
 		})

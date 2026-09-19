@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"io"
 	"strings"
 )
@@ -42,6 +43,11 @@ func runDiff(args []string, _ io.Writer) Result {
 	}
 	changed, err := DiffRun(args[0], args[1])
 	if err != nil {
+		if errors.Is(err, ErrFileUnreadable) {
+			return StatusUsage.ToResult(Result{
+				Findings: []Finding{{RuleID: "TR-012", Message: "diff: " + err.Error()}},
+			})
+		}
 		return StatusInvalid.ToResult(Result{
 			Findings: []Finding{{RuleID: "TR-012", Message: "diff failed: " + err.Error()}},
 		})

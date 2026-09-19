@@ -17,10 +17,12 @@ func TestTR_012_VerifyVerbReadsRealFile(t *testing.T) {
 	// (A nil-returning stub would make an unsigned doc indistinguishable from
 	// an unread one; the real backend reads the file to reach that conclusion.)
 
-	// (1) Absent file -> unverified (fails the CP-006 validate precondition).
+	// (1) Absent file -> USAGE (DEFECT-2026-09-19b/T-0390: an unreadable path
+	// is USAGE, not UNVERIFIED -- an unread file is a different condition from
+	// a signature that genuinely failed to verify).
 	res := runVerify([]string{filepath.Join(t.TempDir(), "absent.pdl")}, nil)
-	if res.Status != "UNVERIFIED" {
-		t.Errorf("absent file: status=%s, want UNVERIFIED", res.Status)
+	if res.Status != "USAGE" {
+		t.Errorf("absent file: status=%s, want USAGE", res.Status)
 	}
 
 	// (2) Garbage file -> unverified.

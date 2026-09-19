@@ -11,13 +11,12 @@ import (
 	"os"
 
 	"Protodoc/pkg/extract"
-	"Protodoc/pkg/validate"
 )
 
 // realRedactRun implements the production redact backend.
 func realRedactRun(path string, subtrees []string) RedactResult {
-	if steps, _ := realValidateStepsFor(path); validate.Run(steps).Validity != nil {
-		return RedactResult{Err: os.ErrInvalid}
+	if err := cp006Precondition(path); err != nil {
+		return RedactResult{Err: err}
 	}
 	f, err := os.Open(path)
 	if err != nil {

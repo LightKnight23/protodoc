@@ -106,12 +106,12 @@ func TestTR_012_DispatchEnvelopeIsSingleJSONObject(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Dispatch([]string{"validate", "somefile.pdl", "--json"}, &stdout, &stderr)
 	// validate is now wired to the real decode chain (T-0373): an absent file
-	// resolves to INVALID with a real finding. The point of THIS test is the
-	// single-JSON-envelope shape, which holds regardless of the resolved
-	// status, so we assert the shape and a non-crash exit code rather than a
-	// specific verdict.
-	if code != int(StatusInvalid.Code()) {
-		t.Fatalf("exit code = %d, want %d (INVALID: absent file, real decode)", code, StatusInvalid.Code())
+	// resolves to USAGE (T-0390: an unreadable path is USAGE, not INVALID)
+	// with a real finding. The point of THIS test is the single-JSON-envelope
+	// shape, which holds regardless of the resolved status, so we assert the
+	// shape and a non-crash exit code rather than a specific verdict.
+	if code != int(StatusUsage.Code()) {
+		t.Fatalf("exit code = %d, want %d (USAGE: absent file, real decode)", code, StatusUsage.Code())
 	}
 
 	var obj map[string]any

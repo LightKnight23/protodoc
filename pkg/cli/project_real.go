@@ -7,19 +7,17 @@
 package cli
 
 import (
-	"errors"
 	"os"
 
 	"Protodoc/pkg/canon"
 	"Protodoc/pkg/extract"
-	"Protodoc/pkg/validate"
 )
 
 // realProjectStateFor implements the production project backend.
 func realProjectStateFor(path string) (*canon.Document, error) {
 	// CP-006 precondition.
-	if steps, _ := realValidateStepsFor(path); validate.Run(steps).Validity != nil {
-		return nil, errors.New("project: document failed structural validation (CP-006)")
+	if err := cp006Precondition(path); err != nil {
+		return nil, err
 	}
 
 	f, err := os.Open(path)

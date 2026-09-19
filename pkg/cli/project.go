@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"io"
 	"os"
 
@@ -55,6 +56,11 @@ func runProject(args []string, _ io.Writer) Result {
 	}
 	state, err := ProjectStateFor(args[0])
 	if err != nil {
+		if errors.Is(err, ErrFileUnreadable) {
+			return StatusUsage.ToResult(Result{
+				Findings: []Finding{{RuleID: "TR-012", Message: "project: " + err.Error()}},
+			})
+		}
 		return StatusInvalid.ToResult(Result{
 			Findings: []Finding{{RuleID: "TR-012", Message: "project failed: " + err.Error()}},
 		})

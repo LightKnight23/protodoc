@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"io"
 	"os"
 )
@@ -48,6 +49,9 @@ func runPublish(args []string, _ io.Writer) Result {
 	}
 	out := PublishRun(args[0], partial)
 	if out.Err != nil {
+		if errors.Is(out.Err, ErrFileUnreadable) {
+			return StatusUsage.ToResult(Result{Findings: []Finding{{RuleID: "TR-012", Message: "publish: " + out.Err.Error()}}})
+		}
 		return StatusInvalid.ToResult(Result{Findings: []Finding{{RuleID: "TR-012", Message: out.Err.Error()}}})
 	}
 	if out.ResidueOctets != 0 || !out.CustodyPreserved {

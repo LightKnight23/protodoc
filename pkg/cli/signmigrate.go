@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"io"
 	"os"
 	"strconv"
@@ -74,6 +75,9 @@ func runSign(args []string, _ io.Writer) Result {
 	}
 	out := SignRun(args[0], key, coverage, nil)
 	if out.Err != nil {
+		if errors.Is(out.Err, ErrFileUnreadable) {
+			return StatusUsage.ToResult(Result{Findings: []Finding{{RuleID: "TR-012", Message: "sign: " + out.Err.Error()}}})
+		}
 		return StatusInvalid.ToResult(Result{Findings: []Finding{{RuleID: "TR-012", Message: out.Err.Error()}}})
 	}
 	// HONEST SCOPE (DEFECT-2026-09-19b): the real signature above is genuinely
@@ -157,6 +161,9 @@ func runMigrate(args []string, _ io.Writer) Result {
 	}
 	out := MigrateRun(args[0], toMajor, rescind)
 	if out.Err != nil {
+		if errors.Is(out.Err, ErrFileUnreadable) {
+			return StatusUsage.ToResult(Result{Findings: []Finding{{RuleID: "TR-012", Message: "migrate: " + out.Err.Error()}}})
+		}
 		return StatusInvalid.ToResult(Result{Findings: []Finding{{RuleID: "TR-012", Message: out.Err.Error()}}})
 	}
 	if out.Refused {

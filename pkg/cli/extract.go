@@ -1,6 +1,9 @@
 package cli
 
-import "io"
+import (
+	"errors"
+	"io"
+)
 
 // extract verb wiring (T-0330, TR-012). `protodoc extract` streams a document's
 // CONTENT text via the M05 extract package, exposing page-range/language-filter/
@@ -30,6 +33,11 @@ func runExtract(args []string, _ io.Writer) Result {
 	}
 	units, frac, err := ExtractRun(args[0], locators)
 	if err != nil {
+		if errors.Is(err, ErrFileUnreadable) {
+			return StatusUsage.ToResult(Result{
+				Findings: []Finding{{RuleID: "TR-012", Message: "extract: " + err.Error()}},
+			})
+		}
 		return StatusInvalid.ToResult(Result{
 			Findings: []Finding{{RuleID: "TR-012", Message: "extract failed: " + err.Error()}},
 		})

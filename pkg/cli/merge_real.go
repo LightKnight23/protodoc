@@ -13,11 +13,11 @@ import (
 	"os"
 
 	"Protodoc/pkg/container"
-	"Protodoc/pkg/validate"
 )
 
-// errMergeInputUnreadable is returned when one of merge's three inputs could
-// not be opened, validated, or decoded.
+// errMergeInputUnreadable is a fallback used only if loadMergeState somehow
+// reports !ok with no error (should not happen; kept as a safety net so
+// realMergeRun never silently drops the failure).
 var errMergeInputUnreadable = errors.New("merge input could not be opened, validated, or decoded")
 
 // mergeState is the real decoded state a merge needs from one input's prefix.
@@ -27,26 +27,26 @@ type mergeState struct {
 	ok            bool
 }
 
-func loadMergeState(path string) mergeState {
-	if steps, _ := realValidateStepsFor(path); validate.Run(steps).Validity != nil {
-		return mergeState{}
+func loadMergeState(path string) (mergeState, error) {
+	if err := cp006Precondition(path); err != nil {
+		return mergeState{}, err
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return mergeState{}
+		return mergeState{}, err
 	}
 	defer f.Close()
 	prefix := make([]byte, prefixSize)
 	if _, err := f.ReadAt(prefix, 0); err != nil {
-		return mergeState{}
+		return mergeState{}, err
 	}
 	h, err := container.DecodeHeader(prefix[:container.HeaderSize])
 	if err != nil {
-		return mergeState{}
+		return mergeState{}, err
 	}
 	table, err := container.DecodeSegmentTable(prefix[container.SegmentTableOffset:])
 	if err != nil {
-		return mergeState{}
+		return mergeState{}, err
 	}
 	cd := map[uint64][32]byte{}
 	for i, slot := range table {
@@ -54,17 +54,25 @@ func loadMergeState(path string) mergeState {
 			cd[uint64(i)] = slot.Digest
 		}
 	}
-	return mergeState{historyMode: h.HistoryMode, contentDigest: cd, ok: true}
+	return mergeState{historyMode: h.HistoryMode, contentDigest: cd, ok: true}, nil
 }
 
 // realMergeRun implements the production merge classifier.
 func realMergeRun(base, a, b string) MergeOutcome {
-	bs, as, bbs := loadMergeState(base), loadMergeState(a), loadMergeState(b)
+	bs, errB := loadMergeState(base)
+	as, errA := loadMergeState(a)
+	bbs, errBB := loadMergeState(b)
 	if !bs.ok || !as.ok || !bbs.ok {
-		// A missing/unreadable/malformed input is INVALID, never REFUSED
-		// (DEFECT-2026-09-19b/T-0384): REFUSED is reserved for a genuine policy
-		// refusal on an otherwise-fine input (CON-024/CON-025/FR-024), and
-		// cli.md does not even list exit code 6 among merge's used codes.
+		// A missing/unreadable/malformed input is INVALID (or USAGE if it
+		// could not be opened at all), never REFUSED (DEFECT-2026-09-19b/
+		// T-0384): REFUSED is reserved for a genuine policy refusal on an
+		// otherwise-fine input (CON-024/CON-025/FR-024), and cli.md does not
+		// even list exit code 6 among merge's used codes.
+		for _, err := range []error{errB, errA, errBB} {
+			if err != nil {
+				return MergeOutcome{Err: err}
+			}
+		}
 		return MergeOutcome{Err: errMergeInputUnreadable}
 	}
 

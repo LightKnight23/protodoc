@@ -17,10 +17,11 @@ import (
 func TestTR_012_RedactVerbReadsRealFile(t *testing.T) {
 	outPath := func() string { return filepath.Join(t.TempDir(), "out.pdl") }
 
-	// (1) Absent file -> INVALID.
+	// (1) Absent file -> USAGE (DEFECT-2026-09-19b/T-0390: an unreadable path
+	// is USAGE, not INVALID).
 	res := runRedact([]string{filepath.Join(t.TempDir(), "absent.pdl"), "--subtree", "deadbeef", "--out", outPath()}, nil)
-	if res.Status != "INVALID" {
-		t.Errorf("absent file: status=%s, want INVALID", res.Status)
+	if res.Status != "USAGE" {
+		t.Errorf("absent file: status=%s, want USAGE", res.Status)
 	}
 
 	// (2) A real doc with two content frames; redact the first by its authored

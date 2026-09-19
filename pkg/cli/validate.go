@@ -33,6 +33,16 @@ func runValidate(args []string, _ io.Writer) Result {
 	steps, checks := ValidateStepsFor(args[0])
 	res := validate.Run(steps)
 
+	// DEFECT-2026-09-19b/T-0390: a file that could not be opened at all is
+	// USAGE, not INVALID (cli.md S1: "an unreadable path"), matching
+	// inspect's already-correct behaviour.
+	if res.Validity != nil && res.Validity.RuleID == unreadableFileRuleID {
+		return StatusUsage.ToResult(Result{
+			Findings: FindingsFromValidation(res),
+			Extra:    map[string]any{"checks": checks},
+		})
+	}
+
 	active := StatusesFromValidation(res)
 	status := Resolve(active)
 	return status.ToResult(Result{

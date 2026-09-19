@@ -15,13 +15,12 @@ import (
 	"Protodoc/pkg/container"
 	"Protodoc/pkg/extract"
 	"Protodoc/pkg/pdlfmt"
-	"Protodoc/pkg/validate"
 )
 
 // realPublishRun implements the production publish backend.
 func realPublishRun(path string, partial bool) PublishResult {
-	if steps, _ := realValidateStepsFor(path); validate.Run(steps).Validity != nil {
-		return PublishResult{Err: os.ErrInvalid}
+	if err := cp006Precondition(path); err != nil {
+		return PublishResult{Err: err}
 	}
 	f, err := os.Open(path)
 	if err != nil {

@@ -10,14 +10,13 @@ import (
 	"os"
 
 	"Protodoc/pkg/extract"
-	"Protodoc/pkg/validate"
 )
 
 // realExtractRun implements the production extract backend.
 func realExtractRun(path string, locators bool) (units []string, firstUnitReadFraction float64, err error) {
 	// CP-006 precondition: the file must validate structurally first.
-	if steps, _ := realValidateStepsFor(path); validate.Run(steps).Validity != nil {
-		return nil, 0, os.ErrInvalid
+	if err := cp006Precondition(path); err != nil {
+		return nil, 0, err
 	}
 
 	f, err := os.Open(path)

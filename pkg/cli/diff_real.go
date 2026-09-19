@@ -12,15 +12,14 @@ import (
 	"os"
 
 	"Protodoc/pkg/container"
-	"Protodoc/pkg/validate"
 )
 
 // contentDigests returns the per-ordinal CONTENT slot digests of a document,
 // or an error if the file fails to open/validate/decode. This is a real read
 // of the file's segment table (content-addressed identities), not a stub.
 func contentDigests(path string) (map[uint64][32]byte, error) {
-	if steps, _ := realValidateStepsFor(path); validate.Run(steps).Validity != nil {
-		return nil, os.ErrInvalid
+	if err := cp006Precondition(path); err != nil {
+		return nil, err
 	}
 	f, err := os.Open(path)
 	if err != nil {

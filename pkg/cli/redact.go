@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"io"
 	"os"
 )
@@ -54,6 +55,9 @@ func runRedact(args []string, _ io.Writer) Result {
 	}
 	out := RedactRun(args[0], subtrees)
 	if out.Err != nil {
+		if errors.Is(out.Err, ErrFileUnreadable) {
+			return StatusUsage.ToResult(Result{Findings: []Finding{{RuleID: "TR-012", Message: "redact: " + out.Err.Error()}}})
+		}
 		return StatusInvalid.ToResult(Result{Findings: []Finding{{RuleID: "TR-012", Message: out.Err.Error()}}})
 	}
 	if err := writeRedactFile(to, out.Output); err != nil {

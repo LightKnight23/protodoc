@@ -30,11 +30,12 @@ func TestTR_012_DiffVerbReadsRealFiles(t *testing.T) {
 		t.Errorf("documents differing in content must report changes, got 0")
 	}
 
-	// (3) Absent input -> INVALID (the verb refuses rather than reporting a
+	// (3) Absent input -> USAGE (DEFECT-2026-09-19b/T-0390: an unreadable path
+	// is USAGE, not INVALID; the verb still refuses rather than reporting a
 	// spurious no-difference OK).
 	res = runDiff([]string{a, filepath.Join(t.TempDir(), "absent.pdl")}, nil)
-	if res.Status != "INVALID" {
-		t.Errorf("absent input must yield INVALID, got %s", res.Status)
+	if res.Status != "USAGE" {
+		t.Errorf("absent input must yield USAGE, got %s", res.Status)
 	}
 
 	// Missing operand -> USAGE.

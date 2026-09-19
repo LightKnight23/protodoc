@@ -18,6 +18,12 @@ type VerifyVerdict struct {
 // M09's Verify()/Verdict machinery and M10's LTV path.
 var VerifyRun = func(path string) []VerifyVerdict { return nil }
 
+// verifyVerdictUsage is a sentinel Verdict value (never a real M09 verdict
+// name) the real backend uses to signal "the file could not be opened at
+// all", which runVerify maps to USAGE rather than folding into UNVERIFIED
+// (DEFECT-2026-09-19b/T-0390).
+const verifyVerdictUsage = "usage:file-unreadable"
+
 // verifyStatus maps an M09 verdict name to the cli Status.
 func verifyStatus(verdict string) Status {
 	switch verdict {
@@ -37,6 +43,12 @@ func runVerify(args []string, _ io.Writer) Result {
 		})
 	}
 	verdicts := VerifyRun(args[0])
+
+	if len(verdicts) == 1 && verdicts[0].Verdict == verifyVerdictUsage {
+		return StatusUsage.ToResult(Result{
+			Findings: []Finding{{RuleID: "TR-012", Message: "cannot open " + args[0]}},
+		})
+	}
 
 	active := map[Status]bool{}
 	sigs := make([]map[string]any, 0, len(verdicts))

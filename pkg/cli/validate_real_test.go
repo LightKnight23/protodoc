@@ -55,10 +55,11 @@ func TestTR_012_ValidateVerbRejectsGarbageFileAcceptsSample(t *testing.T) {
 		t.Fatalf("production ValidateStepsFor must not be the no-op stub")
 	}
 
-	// (1) Absent file -> INVALID, not OK.
+	// (1) Absent file -> USAGE, not OK (DEFECT-2026-09-19b/T-0390: an
+	// unreadable path is USAGE, not INVALID).
 	res := runValidate([]string{filepath.Join(t.TempDir(), "does-not-exist.pdl")}, nil)
-	if res.Status != "INVALID" {
-		t.Errorf("absent file: status=%s, want INVALID", res.Status)
+	if res.Status != "USAGE" {
+		t.Errorf("absent file: status=%s, want USAGE", res.Status)
 	}
 	if len(res.Findings) == 0 {
 		t.Errorf("absent file must produce a finding")

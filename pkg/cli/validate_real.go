@@ -29,13 +29,20 @@ import (
 func realValidateStepsFor(path string) ([]validate.Step, int) {
 	prefix, fileLen, openErr := readBoundedPrefix(path)
 	if openErr != nil {
-		// A file we cannot even read is structurally invalid at step 1.
+		// DEFECT-2026-09-19b/T-0390: a file that could not be opened at all
+		// (missing, permission denied) is USAGE ("an unreadable path", cli.md
+		// S1), never INVALID -- distinct from a file that opens fine but is
+		// truncated/malformed, which stays a genuine structural failure.
+		ruleID := "TR-006"
+		if errors.Is(openErr, ErrFileUnreadable) {
+			ruleID = unreadableFileRuleID
+		}
 		return []validate.Step{{
 			ID: validate.StepMagicHeader,
 			Run: func() *validate.Finding {
 				return &validate.Finding{
 					Step:    validate.StepMagicHeader,
-					RuleID:  "TR-006",
+					RuleID:  ruleID,
 					Message: openErr.Error(),
 				}
 			},
@@ -101,13 +108,13 @@ func realValidateStepsFor(path string) ([]validate.Step, int) {
 func readBoundedPrefix(path string) (prefix []byte, fileLen uint64, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, 0, fmt.Errorf("cannot open %q: %w", path, err)
+		return nil, 0, fmt.Errorf("%w: cannot open %q: %w", ErrFileUnreadable, path, err)
 	}
 	defer f.Close()
 
 	info, err := f.Stat()
 	if err != nil {
-		return nil, 0, fmt.Errorf("cannot stat %q: %w", path, err)
+		return nil, 0, fmt.Errorf("%w: cannot stat %q: %w", ErrFileUnreadable, path, err)
 	}
 	fileLen = uint64(info.Size())
 

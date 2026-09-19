@@ -17,10 +17,11 @@ import (
 func TestTR_012_SignVerbReadsRealFile(t *testing.T) {
 	outPath := func() string { return filepath.Join(t.TempDir(), "signed.pdl") }
 
-	// (1) Absent file -> INVALID.
+	// (1) Absent file -> USAGE (DEFECT-2026-09-19b/T-0390: an unreadable path
+	// is USAGE, not INVALID).
 	res := runSign([]string{filepath.Join(t.TempDir(), "absent.pdl"), "--key", "k1", "--coverage", "total", "--intent", "author-approval", "--out", outPath()}, nil)
-	if res.Status != "INVALID" {
-		t.Errorf("absent file: status=%s, want INVALID", res.Status)
+	if res.Status != "USAGE" {
+		t.Errorf("absent file: status=%s, want USAGE", res.Status)
 	}
 
 	// (2) A real valid document -> OK, deterministic signature, --out written.
@@ -66,10 +67,11 @@ func TestTR_012_SignVerbReadsRealFile(t *testing.T) {
 func TestTR_012_MigrateVerbReadsRealFile(t *testing.T) {
 	outPath := func() string { return filepath.Join(t.TempDir(), "out.pdl") }
 
-	// (1) Absent file -> INVALID.
+	// (1) Absent file -> USAGE (DEFECT-2026-09-19b/T-0390: an unreadable path
+	// is USAGE, not INVALID).
 	res := runMigrate([]string{filepath.Join(t.TempDir(), "absent.pdl"), "--to-major", "2", "--out", outPath()}, nil)
-	if res.Status != "INVALID" {
-		t.Errorf("absent file: status=%s, want INVALID", res.Status)
+	if res.Status != "USAGE" {
+		t.Errorf("absent file: status=%s, want USAGE", res.Status)
 	}
 
 	// (2) A clean valid document (format-major 1) migrating to major 2 -> OK,

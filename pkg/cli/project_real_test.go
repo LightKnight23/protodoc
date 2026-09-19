@@ -17,10 +17,11 @@ import (
 func TestTR_012_ProjectVerbReadsRealFile(t *testing.T) {
 	toPath := func() string { return filepath.Join(t.TempDir(), "out.txt") }
 
-	// (1) Absent file -> INVALID (CP-006 validate-first).
+	// (1) Absent file -> USAGE (DEFECT-2026-09-19b/T-0390: an unreadable path
+	// is USAGE, not INVALID).
 	res := runProject([]string{filepath.Join(t.TempDir(), "absent.pdl"), "--to", toPath()}, nil)
-	if res.Status != "INVALID" {
-		t.Errorf("absent file: status=%s, want INVALID", res.Status)
+	if res.Status != "USAGE" {
+		t.Errorf("absent file: status=%s, want USAGE", res.Status)
 	}
 
 	// (2) A real document with CONTENT frames -> non-empty projection keyed by

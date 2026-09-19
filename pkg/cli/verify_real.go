@@ -33,18 +33,25 @@ import (
 
 // realVerifyRun implements the production verify backend.
 func realVerifyRun(path string) []VerifyVerdict {
-	if steps, _ := realValidateStepsFor(path); validate.Run(steps).Validity != nil {
+	// DEFECT-2026-09-19b/T-0390: a file that could not be opened at all is
+	// USAGE, not UNVERIFIED (cli.md S1: "an unreadable path"), matching
+	// inspect's already-correct behaviour.
+	steps, _ := realValidateStepsFor(path)
+	if res := validate.Run(steps); res.Validity != nil {
+		if res.Validity.RuleID == unreadableFileRuleID {
+			return []VerifyVerdict{{Verdict: verifyVerdictUsage}}
+		}
 		return []VerifyVerdict{{Verdict: "unverified"}}
 	}
 
 	f, err := os.Open(path)
 	if err != nil {
-		return []VerifyVerdict{{Verdict: "unverified"}}
+		return []VerifyVerdict{{Verdict: verifyVerdictUsage}}
 	}
 	defer f.Close()
 	info, err := f.Stat()
 	if err != nil {
-		return []VerifyVerdict{{Verdict: "unverified"}}
+		return []VerifyVerdict{{Verdict: verifyVerdictUsage}}
 	}
 	fileLen := uint64(info.Size())
 

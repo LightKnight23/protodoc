@@ -79,12 +79,13 @@ func TestTR_012_MergeVerbReadsRealFiles(t *testing.T) {
 		t.Errorf("no-op merge: status=%s, want OK", res.Status)
 	}
 
-	// Absent input -> INVALID, never REFUSED (DEFECT-2026-09-19b/T-0384:
-	// REFUSED is reserved for a genuine policy refusal on an otherwise-fine
-	// input; cli.md does not list exit code 6 among merge's used codes at all).
+	// Absent input -> USAGE, never REFUSED (DEFECT-2026-09-19b/T-0384: REFUSED
+	// is reserved for a genuine policy refusal on an otherwise-fine input;
+	// cli.md does not list exit code 6 among merge's used codes at all. And
+	// per T-0390, an unreadable path is USAGE, not INVALID).
 	res = runMerge([]string{base, sideA, filepath.Join(t.TempDir(), "absent.pdl")}, nil)
-	if res.Status != "INVALID" {
-		t.Errorf("absent input: status=%s, want INVALID", res.Status)
+	if res.Status != "USAGE" {
+		t.Errorf("absent input: status=%s, want USAGE", res.Status)
 	}
 
 	if r := runMerge([]string{base, sideA}, nil); r.Status != "USAGE" {

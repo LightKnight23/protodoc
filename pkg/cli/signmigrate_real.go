@@ -11,7 +11,6 @@ import (
 
 	"Protodoc/pkg/container"
 	"Protodoc/pkg/eddsa"
-	"Protodoc/pkg/validate"
 )
 
 // realSignRun implements the production sign backend. It reads the file,
@@ -22,8 +21,8 @@ import (
 // identical octets in this CLI path (the real KMS-backed key lookup is a
 // separate concern; here the ref seeds a stable test key).
 func realSignRun(path, key, coverage string, subsetRanges [][2]int) SignResult {
-	if steps, _ := realValidateStepsFor(path); validate.Run(steps).Validity != nil {
-		return SignResult{Err: os.ErrInvalid}
+	if err := cp006Precondition(path); err != nil {
+		return SignResult{Err: err}
 	}
 	f, err := os.Open(path)
 	if err != nil {
@@ -68,8 +67,8 @@ func realSignRun(path, key, coverage string, subsetRanges [][2]int) SignResult {
 // unrepresentable construct halts with the construct + location named and NO
 // output written. A clean document produces migrated output.
 func realMigrateRun(path string, toMajor int, rescindResign bool) MigrateResult {
-	if steps, _ := realValidateStepsFor(path); validate.Run(steps).Validity != nil {
-		return MigrateResult{Err: os.ErrInvalid}
+	if err := cp006Precondition(path); err != nil {
+		return MigrateResult{Err: err}
 	}
 	f, err := os.Open(path)
 	if err != nil {
