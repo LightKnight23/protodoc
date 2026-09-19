@@ -74,8 +74,10 @@ func TestTR_012_CLIConformanceSuite(t *testing.T) {
 	// project: OK and USAGE. project now reads real files (T-0376), so give it a
 	// genuine valid prefix rather than a nonexistent path.
 	projValid := writeValidPrefix(t)
-	check("project/ok", "OK", runProject([]string{projValid, "--format=text"}, nil).Status)
+	projOut := t.TempDir() + "/project-out.txt"
+	check("project/ok", "OK", runProject([]string{projValid, "--format=text", "--to", projOut}, nil).Status)
 	check("project/usage", "USAGE", runProject(nil, nil).Status)
+	check("project/usage-missing-to", "USAGE", runProject([]string{projValid}, nil).Status)
 
 	// redact: OK and USAGE.
 	RedactRun = func(string, []string) RedactResult { return RedactResult{} }

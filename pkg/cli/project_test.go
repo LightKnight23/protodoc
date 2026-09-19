@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"encoding/hex"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -51,11 +53,16 @@ func TestTR_004_ProjectRoundTripsExactly(t *testing.T) {
 	for i, state := range fixtures {
 		ProjectStateFor = func(string) (*canon.Document, error) { return state, nil }
 
-		res := runProject([]string{"doc.pdl", "--format=text"}, nil)
+		toPath := filepath.Join(t.TempDir(), "out.txt")
+		res := runProject([]string{"doc.pdl", "--format=text", "--to", toPath}, nil)
 		if res.Status != "OK" {
 			t.Fatalf("fixture %d: status=%s, want OK", i, res.Status)
 		}
-		projection := res.Extra["projection"].(string)
+		projBytes, err := os.ReadFile(toPath)
+		if err != nil {
+			t.Fatalf("fixture %d: project reported OK but --to file was not written: %v", i, err)
+		}
+		projection := string(projBytes)
 
 		var canonBuf bytes.Buffer
 		if err := canon.Canonicalize(state, &canonBuf); err != nil {
