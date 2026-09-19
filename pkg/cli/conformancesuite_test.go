@@ -86,10 +86,11 @@ func TestTR_012_CLIConformanceSuite(t *testing.T) {
 	check("redact/usage", "USAGE", runRedact(nil, nil).Status)
 
 	// publish: OK, INVALID (residue), USAGE.
+	publishOut := t.TempDir() + "/publish-out.pdl"
 	PublishRun = func(string, bool) PublishResult { return PublishResult{CustodyPreserved: true} }
-	check("publish/ok", "OK", runPublish([]string{"f"}, nil).Status)
+	check("publish/ok", "OK", runPublish([]string{"f", "--out", publishOut}, nil).Status)
 	PublishRun = func(string, bool) PublishResult { return PublishResult{ResidueOctets: 1, CustodyPreserved: true} }
-	check("publish/invalid", "INVALID", runPublish([]string{"f"}, nil).Status)
+	check("publish/invalid", "INVALID", runPublish([]string{"f", "--out", publishOut}, nil).Status)
 	check("publish/usage", "USAGE", runPublish(nil, nil).Status)
 
 	// sign: OK and USAGE.
