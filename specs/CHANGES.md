@@ -64,6 +64,16 @@ T-0306 recorded an author-conducted review without fabricating an external audit
   vote if contested), and the Deprecation Window Policy (3-year minimum). `GOVERNANCE.md`'s status
   updated to APPROVED accordingly.
 
+### T-0345 — NFR-026 external extract+validate trial (OPEN, recruiting)
+
+- **Status:** OPEN. Requires an **outside implementer** to build a passing extracting-and-validating
+  reader from the spec text alone within 5 working days, with actual elapsed days recorded. No such
+  external trial has been run; its results must not be fabricated.
+- **Recruitment:** volunteer call posted 2026-09-19 as
+  [LightKnight23/protodoc#2](https://github.com/LightKnight23/protodoc/issues/2).
+- **Unblocks when:** an outside implementer runs the trial and a dated report records elapsed days and
+  the pass/fail result against the extract+validate conformance corpus.
+
 ### T-0365 — NFR-026 extracting-and-validating trial-miss ruling (OPEN or N/A, awaiting inputs)
 
 - **Status:** OPEN pending the T-0345 trial outcome. If the T-0345 extracting-and-validating reader trial
@@ -72,11 +82,13 @@ T-0306 recorded an author-conducted review without fabricating an external audit
   **Eyvar García** is required and is recorded OPEN here.
 - **Blocked on:** the confirmed T-0345 result, then (if a miss) Eyvar's ruling.
 
-### T-0346 — NFR-027 external rendering trial (OPEN, awaiting an outside implementer)
+### T-0346 — NFR-027 external rendering trial (OPEN, recruiting)
 
 - **Status:** OPEN. Requires an **outside implementer** to build a passing rendering reader from the
   spec text alone within 30 working days, with actual elapsed days recorded. No such external trial has
   been run; its results must not be fabricated.
+- **Recruitment:** volunteer call posted 2026-09-19 as
+  [LightKnight23/protodoc#3](https://github.com/LightKnight23/protodoc/issues/3).
 - **Unblocks when:** an outside implementer runs the trial and a dated report records elapsed days and
   the pass/fail result against the rendering conformance corpus.
 
