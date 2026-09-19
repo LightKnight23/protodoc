@@ -25,14 +25,16 @@ T-0306 recorded an author-conducted review without fabricating an external audit
 
 ### T-0349 — NFR-028 / CQ-012 two-implementation funding decision (RESOLVED)
 
-- **Date:** 2026-09-18
+- **Date:** 2026-09-18 (path-forward revised 2026-09-19)
 - **Decision-maker:** Eyvar García
-- **Path-forward:** community bounty. A public bounty will be posted and an implementer recruited from
-  the community to build the second independent implementation of container/validate/canon, per the
-  T-0348 acceptance protocol.
-- **Fallback-if-unfunded:** if no bounty claimant emerges within a reasonable window, T-0351 remains
-  deferred indefinitely; T-0358's v1-stable capstone records CP-003/NFR-028 as an open blocking gate
-  rather than proceeding without it satisfied.
+- **Path-forward:** open volunteer call, unfunded. No cash bounty; instead, a public GitHub issue and
+  outreach (open-source/PL/crypto communities, CS department capstone-project channels) inviting a
+  volunteer to build the second independent implementation of container/validate/canon, per the T-0348
+  acceptance protocol. Compensation is non-monetary: named credit as CP-003's second implementer,
+  permanently recorded in the project's governance record.
+- **Fallback-if-unfunded:** if no volunteer emerges within a reasonable window, T-0351 remains deferred
+  indefinitely; T-0358's v1-stable capstone records CP-003/NFR-028 as an open blocking gate rather than
+  proceeding without it satisfied.
 - Mirrored in plan.md Section 8's risk row for this item.
 
 ### T-0356 — CON-026 licence/governance gate approval (OPEN, awaiting Eyvar García)
