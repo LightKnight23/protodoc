@@ -52,13 +52,17 @@ T-0306 recorded an author-conducted review without fabricating an external audit
   a design or wire-format change.
 - Mirrored in `plan.md` Section 9 Conflict 5 and `docs/ledger-conditional-write-design-note.md`.
 
-### T-0356 — CON-026 licence/governance gate approval (OPEN, awaiting Eyvar García)
+### T-0356 — CON-026 licence/governance gate approval (RESOLVED)
 
-- **Status:** OPEN. The draft `LICENSE` and `GOVERNANCE.md` (T-0355) exist, but CON-026's "on record
-  before v1" bar requires **Eyvar García's** explicit approval.
-- **Blocked on:** Eyvar's approval (or requested changes) of LICENSE + GOVERNANCE.md.
-- **Unblocks when:** Eyvar records the approval (date, decision-maker, decision=approved,
-  referenced-files=[LICENSE, GOVERNANCE.md]) here.
+- **Date:** 2026-09-19
+- **Decision-maker:** Eyvar García
+- **Decision:** approved
+- **Referenced-files:** LICENSE, LICENSE-CODE, GOVERNANCE.md
+- All four of CON-026's required elements approved as drafted: the Licence Grant (LICENSE for the
+  specification, LICENSE-CODE/Apache 2.0 for the reference implementation), Eyvar García as Named
+  Steward, the Succession Process (180-day unresponsiveness trigger, 30-day comment period, majority
+  vote if contested), and the Deprecation Window Policy (3-year minimum). `GOVERNANCE.md`'s status
+  updated to APPROVED accordingly.
 
 ### T-0365 — NFR-026 extracting-and-validating trial-miss ruling (OPEN or N/A, awaiting inputs)
 
@@ -106,8 +110,8 @@ T-0306 recorded an author-conducted review without fabricating an external audit
 
 ## Honesty note
 
-T-0349 above names Eyvar García as decision-maker because that decision was actually made by him on
-2026-09-18. Every other OPEN entry names no decision-maker, because none of those decisions has actually
-been made yet. Recording them as OPEN is the correct, honest state; the corresponding tests will remain
-red-by-design until the real ruling/trial occurs, which is the release gate doing its job rather than a
-defect to paper over.
+T-0349, T-0356, and plan.md's Conflict 5 above name Eyvar García as decision-maker because those
+decisions were actually made by him, on the dates given. Every remaining OPEN entry names no
+decision-maker, because none of those decisions has actually been made yet. Recording them as OPEN is
+the correct, honest state; the corresponding tests will remain red-by-design until the real
+ruling/trial occurs, which is the release gate doing its job rather than a defect to paper over.

@@ -1,11 +1,9 @@
 # Protodoc Governance
 
-Status: DRAFT -- pending Eyvar Garcia's review and approval. This document
-records a proposal for CON-026's four required elements (licence, named
-steward, succession arrangement, deprecation window) and makes no claim
-that any of it has been approved yet. The approval record, once it exists,
-lives in specs/CHANGES.md (T-0356) and is cross-referenced from there back
-to this file's approved revision.
+Status: APPROVED by Eyvar Garcia, 2026-09-19. All four of CON-026's required
+elements (licence, named steward, succession arrangement, deprecation
+window) below are approved as drafted. The approval record lives in
+specs/CHANGES.md (T-0356).
 
 This document exists to satisfy CON-026 ("The Protodoc specification SHALL
 be published under an irrevocable royalty-free licence covering all
@@ -46,11 +44,10 @@ proposed specification amendments, holding the point of contact for patent
 and licensing questions, and initiating the succession process below if the
 steward becomes unable or unwilling to continue.
 
-This is a draft proposal. A future steward transition (voluntary handoff,
-succession under the process below, or a change to a multi-person steering
-body) is itself a governance decision requiring the same approval discipline
-as this document's own approval in T-0356 -- it is not self-executing from
-this file alone.
+A future steward transition (voluntary handoff, succession under the process
+below, or a change to a multi-person steering body) is itself a governance
+decision requiring the same approval discipline as this document's own
+approval in T-0356 -- it is not self-executing from this file alone.
 
 ## Succession Process
 
