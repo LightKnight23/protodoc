@@ -1,20 +1,15 @@
-// Real redact backend (T-0379, DEFECT-2026-09-19 fix). Replaces the no-op
-// RedactRun stub with a production backend that OPENS the file, runs the
-// CP-006 validate-first precondition, reads the real CONTENT segments, and
-// produces output in which every designated subtree's body octets are OMITTED
-// (replaced by nothing — its plaintext never appears in the output), declaring
-// each omission. Designation is by content-addressed slot digest (hex),
-// matching how project/diff/merge identify constructs; authored-unit-id
-// designation reuses the frame-decode capability tracked as
-// GAP-VERIFY-CONTENT-REBUILD. Go stdlib only.
+// Real redact backend (T-0379, updated to close GAP-VERIFY-CONTENT-REBUILD).
+// Opens the file, runs the CP-006 validate-first precondition, decodes each
+// CONTENT frame into its AUTHORED unit-id + canonical bytes via
+// extract.LoadContentRecords, and produces output in which every designated
+// subtree's frame octets are OMITTED (its plaintext never appears), declaring
+// each omission by AUTHORED unit-id (hex). Go stdlib only.
 package cli
 
 import (
 	"encoding/hex"
-	"io"
 	"os"
 
-	"Protodoc/pkg/container"
 	"Protodoc/pkg/extract"
 	"Protodoc/pkg/validate"
 )
@@ -30,44 +25,28 @@ func realRedactRun(path string, subtrees []string) RedactResult {
 	}
 	defer f.Close()
 
-	prefix := make([]byte, prefixSize)
-	if _, err := f.ReadAt(prefix, 0); err != nil {
-		return RedactResult{Err: err}
-	}
-	table, err := container.DecodeSegmentTable(prefix[container.SegmentTableOffset:])
+	records, err := extract.LoadContentRecords(f)
 	if err != nil {
 		return RedactResult{Err: err}
 	}
-	// Map each requested subtree id (hex of a slot digest prefix) to omit.
+
+	// Designations are authored unit-ids as full 32-hex-char strings.
 	omit := map[string]bool{}
 	for _, s := range subtrees {
 		omit[s] = true
 	}
-	digestKeyByOrdinal := map[uint64]string{}
-	for i, slot := range table {
-		if slot.SegmentType == container.SegmentTypeContent {
-			digestKeyByOrdinal[uint64(i)] = hex.EncodeToString(slot.Digest[:4])
-		}
-	}
 
 	var out []byte
 	var declared []string
-	err = extract.Walk(f, func(seg extract.ContentSegment, r io.Reader) error {
-		frame := make([]byte, seg.Length)
-		if _, rerr := io.ReadFull(r, frame); rerr != nil {
-			return rerr
-		}
-		key := digestKeyByOrdinal[seg.Ordinal]
+	for _, rec := range records {
+		key := hex.EncodeToString(rec.UnitID[:])
 		if omit[key] {
-			// Redacted: the plaintext body is dropped entirely; declare it.
+			// Redacted: the plaintext frame is dropped entirely; declare it by
+			// its authored unit-id.
 			declared = append(declared, key)
-			return nil
+			continue
 		}
-		out = append(out, frame...)
-		return nil
-	})
-	if err != nil {
-		return RedactResult{Err: err}
+		out = append(out, rec.Frame...)
 	}
 	return RedactResult{DeclaredOmissions: declared, Output: out}
 }
