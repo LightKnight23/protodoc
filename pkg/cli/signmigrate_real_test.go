@@ -3,30 +3,38 @@ package cli
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"os"
 	"path/filepath"
 	"testing"
 )
 
 // TestTR_012_SignVerbReadsRealFile is T-0381's named integration test (TR-012,
-// NFR-006, DEFECT-2026-09-19 fix). The production sign backend (realSignRun,
-// wired by init) reads a real file: an absent file is rejected; signing a real
-// document twice with the same key yields byte-identical signatures, and the
+// NFR-006, DEFECT-2026-09-19 fix; updated by T-0387 for required-flag
+// enforcement). The production sign backend (realSignRun, wired by init)
+// reads a real file: an absent file is rejected; signing a real document
+// twice with the same key yields byte-identical signatures, and the
 // signature actually verifies against the derived signed_object.
 func TestTR_012_SignVerbReadsRealFile(t *testing.T) {
+	outPath := func() string { return filepath.Join(t.TempDir(), "signed.pdl") }
+
 	// (1) Absent file -> INVALID.
-	res := runSign([]string{filepath.Join(t.TempDir(), "absent.pdl"), "--key", "k1"}, nil)
+	res := runSign([]string{filepath.Join(t.TempDir(), "absent.pdl"), "--key", "k1", "--coverage", "total", "--intent", "author-approval", "--out", outPath()}, nil)
 	if res.Status != "INVALID" {
 		t.Errorf("absent file: status=%s, want INVALID", res.Status)
 	}
 
-	// (2) A real valid document -> OK, deterministic signature.
+	// (2) A real valid document -> OK, deterministic signature, --out written.
 	doc := writeValidPrefix(t)
-	res = runSign([]string{doc, "--key", "k1", "--coverage", "total"}, nil)
+	out2 := outPath()
+	res = runSign([]string{doc, "--key", "k1", "--coverage", "total", "--intent", "author-approval", "--out", out2}, nil)
 	if res.Status != "OK" {
 		t.Fatalf("sign: status=%s (%+v), want OK", res.Status, res.Findings)
 	}
 	if res.Extra["signature_len"].(int) != 64 {
 		t.Errorf("signature must be 64 octets (R||S), got %d", res.Extra["signature_len"])
+	}
+	if _, err := os.Stat(out2); err != nil {
+		t.Errorf("sign reported OK but --out file was not written: %v", err)
 	}
 
 	// Determinism (NFR-006): the backend produces identical octets on repeat.
@@ -49,21 +57,37 @@ func TestTR_012_SignVerbReadsRealFile(t *testing.T) {
 }
 
 // TestTR_012_MigrateVerbReadsRealFile is T-0382's named integration test
-// (TR-012, DEFECT-2026-09-19 fix). The production migrate backend
+// (TR-012, DEFECT-2026-09-19 fix; updated by T-0388 for --to-major/--out
+// enforcement and file-write). The production migrate backend
 // (realMigrateRun, wired by init) reads a real file: an absent file is
-// rejected; a clean valid document migrates; a document with a reserved
-// (unrepresentable) segment type is refused phase-1 with no output.
+// rejected; a clean valid document migrates and is actually written to
+// --out; a document with a reserved (unrepresentable) segment type is
+// refused phase-1 with no output.
 func TestTR_012_MigrateVerbReadsRealFile(t *testing.T) {
+	outPath := func() string { return filepath.Join(t.TempDir(), "out.pdl") }
+
 	// (1) Absent file -> INVALID.
-	res := runMigrate([]string{filepath.Join(t.TempDir(), "absent.pdl")}, nil)
+	res := runMigrate([]string{filepath.Join(t.TempDir(), "absent.pdl"), "--to-major", "2", "--out", outPath()}, nil)
 	if res.Status != "INVALID" {
 		t.Errorf("absent file: status=%s, want INVALID", res.Status)
 	}
 
-	// (2) A clean valid document -> OK, output written.
+	// (2) A clean valid document (format-major 1) migrating to major 2 -> OK,
+	// output actually written.
 	doc := writeValidPrefix(t)
-	res = runMigrate([]string{doc}, nil)
+	out2 := outPath()
+	res = runMigrate([]string{doc, "--to-major", "2", "--out", out2}, nil)
 	if res.Status != "OK" || res.Extra["output_written"] != true {
 		t.Errorf("clean migrate: status=%s output=%v, want OK/true", res.Status, res.Extra["output_written"])
+	}
+	if _, err := os.Stat(out2); err != nil {
+		t.Errorf("migrate reported OK but --out file was not written: %v", err)
+	}
+
+	// (3) --to-major not greater than current format-major -> REFUSED
+	// (a migration is always forward).
+	res = runMigrate([]string{doc, "--to-major", "1", "--out", outPath()}, nil)
+	if res.Status != "REFUSED" {
+		t.Errorf("non-forward migration: status=%s, want REFUSED", res.Status)
 	}
 }

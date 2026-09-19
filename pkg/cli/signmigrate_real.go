@@ -84,6 +84,20 @@ func realMigrateRun(path string, toMajor int, rescindResign bool) MigrateResult 
 	if err != nil {
 		return MigrateResult{Err: err}
 	}
+	h, err := container.DecodeHeader(prefix[:container.HeaderSize])
+	if err != nil {
+		return MigrateResult{Err: err}
+	}
+	// A migration is always forward (DEFECT-2026-09-19b/T-0388): --to-major
+	// must name a version strictly greater than the file's current
+	// format-major, per cli.md's migrate contract.
+	if toMajor <= int(h.FormatMajor) {
+		return MigrateResult{
+			Refused:          true,
+			RefusedConstruct: "non-forward-migration",
+			RefusedLocation:  "format-major " + itoaCLI(int(h.FormatMajor)),
+		}
+	}
 
 	// Phase 1 (refusal-first): scan for a segment type not representable in the
 	// target major. Reserved segment types (>4) are unrepresentable.

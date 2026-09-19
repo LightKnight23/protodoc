@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os"
 	"testing"
 
 	"Protodoc/pkg/validate"
@@ -94,17 +95,23 @@ func TestTR_012_CLIConformanceSuite(t *testing.T) {
 	check("publish/usage", "USAGE", runPublish(nil, nil).Status)
 
 	// sign: OK and USAGE.
+	signIn := t.TempDir() + "/sign-in.pdl"
+	if err := os.WriteFile(signIn, []byte("fixture"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	signOut := t.TempDir() + "/sign-out.pdl"
 	SignRun = func(string, string, string, [][2]int) SignResult { return SignResult{} }
-	check("sign/ok", "OK", runSign([]string{"f", "--key", "k"}, nil).Status)
+	check("sign/ok", "OK", runSign([]string{signIn, "--key", "k", "--coverage", "total", "--intent", "author-approval", "--out", signOut}, nil).Status)
 	check("sign/usage", "USAGE", runSign(nil, nil).Status)
 
 	// migrate: OK, REFUSED (phase-1), USAGE.
+	migrateOut := t.TempDir() + "/migrate-out.pdl"
 	MigrateRun = func(string, int, bool) MigrateResult { return MigrateResult{} }
-	check("migrate/ok", "OK", runMigrate([]string{"f"}, nil).Status)
+	check("migrate/ok", "OK", runMigrate([]string{"f", "--to-major", "2", "--out", migrateOut}, nil).Status)
 	MigrateRun = func(string, int, bool) MigrateResult {
 		return MigrateResult{Refused: true, RefusedConstruct: "X", RefusedLocation: "seg 0"}
 	}
-	check("migrate/refused", "REFUSED", runMigrate([]string{"f"}, nil).Status)
+	check("migrate/refused", "REFUSED", runMigrate([]string{"f", "--to-major", "2", "--out", migrateOut}, nil).Status)
 	check("migrate/usage", "USAGE", runMigrate(nil, nil).Status)
 
 	// inspect + all 11 verbs registered.
