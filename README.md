@@ -112,9 +112,9 @@ go.mod                            Go 1.25 module
 
 ## Acknowledgments
 
-Protodoc went from a rough sketch to a frozen, cross-referenced spec and a working, tested Go
-reference implementation almost entirely through AI-assisted development, and that's worth naming
-plainly rather than glossing over:
+Protodoc went from an idea scribbled in a worn-out notebook to a frozen, cross-referenced spec and a
+working, tested Go reference implementation almost entirely through AI-assisted development, and
+that's worth naming plainly rather than glossing over:
 
 - **[Claude Code](https://claude.com/claude-code) and [Anthropic](https://www.anthropic.com/)** —
   drove the full spec-driven-development pipeline (constitution through analysis), the initial
