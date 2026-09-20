@@ -7,19 +7,30 @@ package cli
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"fmt"
 	"os"
 
 	"Protodoc/pkg/container"
 	"Protodoc/pkg/eddsa"
+	"Protodoc/pkg/integrity"
+	"Protodoc/pkg/ledger"
 )
 
-// realSignRun implements the production sign backend. It reads the file,
-// validates it (CP-006), derives the signed_object digest from the winning
-// commit-ring record's recorded T_C_root/structure_digest, and produces a real,
-// deterministic EdDSA-Protodoc-1 signature (NFR-006). The key is derived
-// deterministically from the key ref so signing the same file+ref twice yields
-// identical octets in this CLI path (the real KMS-backed key lookup is a
-// separate concern; here the ref seeds a stable test key).
+// realSignRun implements the production sign backend (T-0392). It reads the
+// file, validates it (CP-006), discovers existing ATTESTATION_EVIDENCE in the
+// document's ATTEST segments, and:
+//   - REFUSES (cli.md S11) if the required credential-chain and time-attestation
+//     evidence are not present — never fabricating a reference to avoid it; or
+//   - builds a real SIGNATURE record referencing that evidence, encodes it,
+//     appends it as a new ATTEST segment, recomputes the segment-table and
+//     structure digests, reissues the winning commit-ring record (segment_count
+//     +1, new ledger_length, new sequence), and returns the complete
+//     re-serialized signed document in Output.
+//
+// The signature is a real, deterministic EdDSA-Protodoc-1 signature (NFR-006)
+// over the signed_object derived from the winner's T_C_root/structure_digest.
+// The key is derived deterministically from the key ref (the KMS-backed key
+// lookup is a separate concern). Go stdlib only.
 func realSignRun(path, key, coverage string, subsetRanges [][2]int) SignResult {
 	if err := cp006Precondition(path); err != nil {
 		return SignResult{Err: err}
@@ -33,14 +44,39 @@ func realSignRun(path, key, coverage string, subsetRanges [][2]int) SignResult {
 	if err != nil {
 		return SignResult{Err: err}
 	}
-	prefix := make([]byte, prefixSize)
-	if _, err := f.ReadAt(prefix, 0); err != nil {
+	fileLen := uint64(info.Size())
+
+	whole := make([]byte, fileLen)
+	if _, err := f.ReadAt(whole, 0); err != nil {
 		return SignResult{Err: err}
 	}
-	ring := prefix[container.HeaderSize : container.HeaderSize+container.CommitRingSize]
-	winner, _, err := container.SelectWinner(ring, uint64(info.Size()))
+	prefix := whole[:prefixSize]
+
+	ringRegion := prefix[container.HeaderSize : container.HeaderSize+container.CommitRingSize]
+	winner, _, err := container.SelectWinner(ringRegion, fileLen)
 	if err != nil {
 		return SignResult{Err: err}
+	}
+	table, err := container.DecodeSegmentTable(prefix[container.SegmentTableOffset:])
+	if err != nil {
+		return SignResult{Err: err}
+	}
+
+	// Discover existing ATTESTATION_EVIDENCE by kind.
+	ev, err := DiscoverEvidence(f, table)
+	if err != nil {
+		return SignResult{Err: err}
+	}
+	// cli.md S11: refuse (do not fabricate) when required evidence is absent.
+	if !ev.HasCredChain || !ev.HasTimeAttest {
+		var missing []string
+		if !ev.HasCredChain {
+			missing = append(missing, "credential-chain")
+		}
+		if !ev.HasTimeAttest {
+			missing = append(missing, "time-attestation")
+		}
+		return SignResult{Refused: true, RefusalReason: "required LTV evidence not present in document: missing " + joinCLI(missing, ", ")}
 	}
 
 	// signed_object digest = SHA-256 over the winner's T_C_root || structure.
@@ -48,8 +84,6 @@ func realSignRun(path, key, coverage string, subsetRanges [][2]int) SignResult {
 	pre = append(pre, winner.TCRoot[:]...)
 	pre = append(pre, winner.StructureDigest[:]...)
 	msg := sha256.Sum256(pre)
-
-	// Deterministic key from the ref seed (real EdDSA-Protodoc-1 signing path).
 	seed := sha256.Sum256([]byte("protodoc-key:" + key))
 	priv := ed25519.NewKeyFromSeed(seed[:])
 	sig := eddsa.Sign(priv, msg)
@@ -59,7 +93,145 @@ func realSignRun(path, key, coverage string, subsetRanges [][2]int) SignResult {
 	if !total {
 		ranges = subsetRanges
 	}
-	return SignResult{SignatureOctets: sig[:], Total: total, CoveredRanges: ranges}
+
+	// Build a real SIGNATURE record referencing the discovered evidence.
+	var so integrity.Digest
+	copy(so[:], msg[:])
+	rec := integrity.SignatureRecord{
+		ParamSet:           0,
+		SignedObject:       so,
+		Coverage:           integrity.CoverageDescriptor{Mode: integrity.CoverageModeTotal},
+		CredChainRef:       ev.CredChain,
+		TimeAttestationRef: ev.TimeAttest,
+		Intent:             uint8(integrity.IntentAuthorApproval),
+		// PresentationRef left zero16 here (total coverage, no presentation
+		// artefact bound in this minimal signed document).
+	}
+	copy(rec.Value[:], sig[:])
+	if ev.HasRevocation {
+		rec.RevocationRef = ev.Revocation
+	}
+	sigBody, err := rec.Encode()
+	if err != nil {
+		return SignResult{Err: fmt.Errorf("sign: encoding SIGNATURE record: %w", err)}
+	}
+
+	// Frame the SIGNATURE record in a ledger ATTEST segment (header + body).
+	segHeader := ledger.EncodeSegmentHeader(ledger.SegmentHeader{
+		Type:       container.SegmentTypeAttest,
+		FrameCount: 1,
+	})
+	segment := append(append([]byte(nil), segHeader...), sigBody...)
+
+	// Append the new ATTEST segment at end-of-file; record its slot.
+	newOffset := fileLen
+	var segDigest [32]byte = sha256.Sum256(segment)
+	newSlot := container.SegmentTableSlot{
+		SegmentType: container.SegmentTypeAttest,
+		Offset:      newOffset,
+		Length:      uint64(len(segment)),
+		FrameCount:  1,
+		Digest:      segDigest,
+	}
+
+	// Rebuild the slot list with the new ATTEST slot at the next free ordinal.
+	slots := make([]container.SegmentTableSlot, 0, container.MaxSegments)
+	used := 0
+	for _, s := range table {
+		if s.SegmentType == container.SegmentTypeUnused {
+			continue
+		}
+		slots = append(slots, s)
+		used++
+	}
+	slots = append(slots, newSlot)
+
+	// Re-encode the segment table into the prefix.
+	newPrefix := append([]byte(nil), prefix...)
+	stEnc, err := container.EncodeSegmentTable(slots, nil)
+	if err != nil {
+		return SignResult{Err: fmt.Errorf("sign: re-encoding segment table: %w", err)}
+	}
+	copy(newPrefix[container.SegmentTableOffset:], stEnc)
+
+	// Recompute the segment-table digest and reissue the winning ring record
+	// (new sequence, segment_count+1, new ledger_length). Content is unchanged,
+	// so T_C_root is carried forward unchanged (signing never alters content).
+	newSegTableDigest := sha256.Sum256(newPrefix[container.SegmentTableOffset : container.SegmentTableOffset+container.SegmentTableRegionSize])
+	newLedgerLength := newOffset + uint64(len(segment))
+
+	newWinner := winner
+	newWinner.Sequence = winner.Sequence + 1
+	newWinner.SegmentCount = uint16(len(slots))
+	newWinner.LedgerLength = newLedgerLength
+	newWinner.SegmentTableDigest = newSegTableDigest
+	newWinner.ParentStateID = winner.StateID
+	// T_C_root unchanged (content not altered). structure_digest recomputed
+	// fresh over the new ring/segment-table via the integrity assembler.
+	sd, err := recomputeStructureDigest(newPrefix, newWinner, newLedgerLength, slots)
+	if err != nil {
+		return SignResult{Err: err}
+	}
+	newWinner.StructureDigest = sd
+
+	// Write the reissued winner into every ring slot (a fresh single-writer
+	// commit: all slots carry the new winning record, self-sealed on Encode).
+	ringOut := newPrefix[container.HeaderSize : container.HeaderSize+container.CommitRingSize]
+	for i := 0; i < container.CommitRingSlots; i++ {
+		newWinner.Encode(ringOut[i*container.RingSlotSize : (i+1)*container.RingSlotSize])
+	}
+
+	// Assemble the complete output: new prefix + all existing bodies + new seg.
+	out := make([]byte, 0, int(newLedgerLength))
+	out = append(out, newPrefix...)
+	out = append(out, whole[prefixSize:]...) // existing segment bodies unchanged
+	out = append(out, segment...)            // the new ATTEST segment
+
+	return SignResult{
+		SignatureOctets: sig[:],
+		Total:           total,
+		CoveredRanges:   ranges,
+		Output:          out,
+	}
+}
+
+// recomputeStructureDigest recomputes structure_digest over the reissued ring
+// winner + new segment table, per integrity.abnf S3.1 (header + ring-winner +
+// ledger-length + segment-table summaries + T_S root, gated by the bitmask).
+// It uses the full-coverage bitmask so the signed_object binds the whole
+// structure the writer just produced.
+func recomputeStructureDigest(prefix []byte, winner container.CommitRingRecord, ledgerLength uint64, slots []container.SegmentTableSlot) (integrity.Digest, error) {
+	summaries := make([]integrity.CoveredSegmentSummary, 0, len(slots))
+	for i, s := range slots {
+		summaries = append(summaries, integrity.CoveredSegmentSummary{
+			Ordinal: uint16(i),
+			Type:    s.SegmentType,
+			Length:  s.Length,
+			Digest:  integrity.Digest(s.Digest),
+		})
+	}
+	var ringWinnerBytes [container.RingSlotSize]byte
+	winner.Encode(ringWinnerBytes[:])
+	in := integrity.StructureDigestInput{
+		Bitmask:          integrity.CoverageBitHeader | integrity.CoverageBitRingWinner | integrity.CoverageBitSegmentTable,
+		HeaderBytes:      prefix[:480],
+		RingWinnerBytes:  ringWinnerBytes[:480],
+		LedgerLength:     ledgerLength,
+		CoveredSummaries: summaries,
+	}
+	return integrity.StructureDigest(in)
+}
+
+// joinCLI joins with sep (avoids importing strings just for this).
+func joinCLI(xs []string, sep string) string {
+	out := ""
+	for i, x := range xs {
+		if i > 0 {
+			out += sep
+		}
+		out += x
+	}
+	return out
 }
 
 // realMigrateRun implements the production migrate backend. It reads the file,

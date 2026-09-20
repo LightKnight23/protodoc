@@ -102,7 +102,9 @@ func TestTR_012_CLIConformanceSuite(t *testing.T) {
 		t.Fatal(err)
 	}
 	signOut := t.TempDir() + "/sign-out.pdl"
-	SignRun = func(string, string, string, [][2]int) SignResult { return SignResult{} }
+	SignRun = func(string, string, string, [][2]int) SignResult {
+		return SignResult{SignatureOctets: make([]byte, 64), Total: true, Output: []byte("signed-doc")}
+	}
 	check("sign/ok", "OK", runSign([]string{signIn, "--key", "k", "--coverage", "total", "--intent", "author-approval", "--out", signOut}, nil).Status)
 	check("sign/usage", "USAGE", runSign(nil, nil).Status)
 

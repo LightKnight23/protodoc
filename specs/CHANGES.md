@@ -281,6 +281,27 @@ This is closer in scope to several of the original M09 implementation tasks than
 touches the format's actual cryptographic signing path, so it is handed off with this concrete
 investigation rather than rushed. Filed as **T-0392**.
 
+**sign (RESOLVED 2026-09-19, T-0392).** All three pieces built:
+
+1. **ATTEST-segment record reader** (`pkg/cli/attestreader.go`): decodes ATTEST records with the correct
+   framing (discriminant is a real tag=0 field via `pdlfmt.DecodeRecord(body, nil, 0)`), distinct from
+   the raw-leading-byte content-frame framing. `DiscoverEvidence` scans every ATTEST segment for
+   `ATTESTATION_EVIDENCE` records and indexes their `ae-id` by `AeKind`.
+2. **Refusal path** (cli.md S11): when a credential-chain or time-attestation evidence record is not
+   present, `sign` REFUSES (`FR-070` finding, no `--out` written) — no evidence is fabricated.
+3. **Embed path**: when both required evidence records are present, `sign` builds a real
+   `SignatureRecord` (total coverage, referencing the discovered `ae-id`s and the real deterministic
+   EdDSA-Protodoc-1 signature), encodes it, frames it in a ledger ATTEST segment, appends it as a NEW
+   segment-table slot, recomputes the segment-table digest and `structure_digest`, reissues the winning
+   commit-ring record (sequence+1, segment_count+1, new ledger_length, parent = prior state), and writes
+   the complete re-serialized signed document to `--out`. `T_C_root` is carried forward unchanged
+   (signing never alters content). The `"signed_document_complete": false` caveat and its finding are
+   removed; the response now reports `"signed_document_complete": true`. Verified by
+   `TestTR_012_SignVerbEmbedsRealSignature`: the no-evidence document is REFUSED with no output; the
+   evidence-bearing document yields a file larger than the input that decodes with one more ATTEST
+   segment (the spliced SIGNATURE, which itself decodes and references the real evidence), and signing
+   twice is byte-identical (NFR-006).
+
 ## Honesty note
 
 T-0349, T-0356, and plan.md's Conflict 5 above name Eyvar García as decision-maker because those

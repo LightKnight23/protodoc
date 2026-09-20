@@ -24,8 +24,16 @@ func TestTR_012_SignVerbReadsRealFile(t *testing.T) {
 		t.Errorf("absent file: status=%s, want USAGE", res.Status)
 	}
 
-	// (2) A real valid document -> OK, deterministic signature, --out written.
-	doc := writeValidPrefix(t)
+	// (2) A no-evidence document -> REFUSED (cli.md S11), no --out written.
+	noEv := writeValidPrefix(t)
+	refusedOut := outPath()
+	res = runSign([]string{noEv, "--key", "k1", "--coverage", "total", "--intent", "author-approval", "--out", refusedOut}, nil)
+	if res.Status != "REFUSED" {
+		t.Errorf("no-evidence sign: status=%s, want REFUSED", res.Status)
+	}
+
+	// (3) A real document WITH evidence -> OK, real signed document written.
+	doc, _, _ := writeDocWithEvidence(t)
 	out2 := outPath()
 	res = runSign([]string{doc, "--key", "k1", "--coverage", "total", "--intent", "author-approval", "--out", out2}, nil)
 	if res.Status != "OK" {
@@ -48,8 +56,7 @@ func TestTR_012_SignVerbReadsRealFile(t *testing.T) {
 	// The signature genuinely verifies against the derived signed_object + key.
 	seed := sha256.Sum256([]byte("protodoc-key:k1"))
 	pub := ed25519.NewKeyFromSeed(seed[:]).Public().(ed25519.PublicKey)
-	// Reconstruct the msg the backend signed (T_C_root||structure of the doc).
-	// A different key produces a different, non-verifying signature:
+	// A different key produces a different signature:
 	sOther := realSignRun(doc, "k2", "total", nil)
 	if string(sOther.SignatureOctets) == string(s1.SignatureOctets) {
 		t.Errorf("different keys must produce different signatures")

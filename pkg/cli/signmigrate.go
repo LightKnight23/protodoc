@@ -17,6 +17,9 @@ type SignResult struct {
 	SignatureOctets []byte
 	CoveredRanges   [][2]int // covered segment ordinal ranges (SUBSET mode)
 	Total           bool     // TOTAL coverage mode
+	Output          []byte   // the complete re-serialized signed document (embed path)
+	Refused         bool     // true when required LTV evidence is absent (cli.md S11)
+	RefusalReason   string   // populated when Refused
 	Err             error
 }
 
@@ -80,19 +83,18 @@ func runSign(args []string, _ io.Writer) Result {
 		}
 		return StatusInvalid.ToResult(Result{Findings: []Finding{{RuleID: "TR-012", Message: out.Err.Error()}}})
 	}
-	// HONEST SCOPE (DEFECT-2026-09-19b): the real signature above is genuinely
-	// computed (NFR-006 determinism holds), but this backend does not yet
-	// splice a new SIGNATURE segment into a re-serialized document -- doing so
-	// safely needs real segment-table/commit-ring reconstruction, which does
-	// not exist yet. Writing a fabricated "signed" file would be worse than
-	// not writing one, so the original document's bytes are copied to --out
-	// unchanged and the response says plainly that embedding is not yet done,
-	// rather than silently claiming a complete signed document was produced.
-	orig, rerr := os.ReadFile(args[0])
-	if rerr != nil {
-		return StatusInvalid.ToResult(Result{Findings: []Finding{{RuleID: "TR-012", Message: "sign: re-reading input for --out: " + rerr.Error()}}})
+	// cli.md S11: required LTV evidence absent -> REFUSE, write no --out.
+	if out.Refused {
+		return StatusRefused.ToResult(Result{
+			Extra:    map[string]any{"out_written": false},
+			Findings: []Finding{{RuleID: "FR-070", Message: "sign refused: " + out.RefusalReason}},
+		})
 	}
-	if err := writeSignFile(to, orig); err != nil {
+	// Embed path: write the complete re-serialized signed document to --out.
+	if len(out.Output) == 0 {
+		return StatusInvalid.ToResult(Result{Findings: []Finding{{RuleID: "TR-012", Message: "sign: backend produced no signed document"}}})
+	}
+	if err := writeSignFile(to, out.Output); err != nil {
 		return StatusInvalid.ToResult(Result{Findings: []Finding{{RuleID: "TR-012", Message: "sign: writing --out: " + err.Error()}}})
 	}
 	return StatusOK.ToResult(Result{
@@ -101,9 +103,9 @@ func runSign(args []string, _ io.Writer) Result {
 			"signature_len":            len(out.SignatureOctets),
 			"coverage_total":           out.Total,
 			"covered_ranges":           out.CoveredRanges,
-			"signed_document_complete": false,
+			"signed_document_complete": true,
+			"output_len":               len(out.Output),
 		},
-		Findings: []Finding{{RuleID: "TR-012", Message: "signature computed but not yet embedded in --out; --out is currently an unmodified copy of the input (see docs/cli-usage-guide.md)"}},
 	})
 }
 

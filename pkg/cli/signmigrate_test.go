@@ -29,7 +29,7 @@ func TestTR_012_SignVerbDeterministicOutput(t *testing.T) {
 		if !total {
 			ranges = [][2]int{{0, 2}}
 		}
-		return SignResult{SignatureOctets: sig, Total: total, CoveredRanges: ranges}
+		return SignResult{SignatureOctets: sig, Total: total, CoveredRanges: ranges, Output: []byte("signed-" + path)}
 	}
 
 	r1 := runSign([]string{doc, "--key", "k1", "--coverage", "total", "--intent", "author-approval", "--out", outPath()}, nil)
