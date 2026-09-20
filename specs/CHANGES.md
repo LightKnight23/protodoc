@@ -372,6 +372,61 @@ need to mint a real, empty/no-op PRESENTATION_ARTEFACT segment for total coverag
 `SignedObjectForSignature`'s contract (it may need a documented total-coverage exception) — a design
 question for `sign`/`integrity`, not a `verify`-side bug, and not something to guess at silently.
 
+## DEFECT-2026-09-20b — diff never populated/compared a real content digest, so same-count differing documents always reported identical
+
+**Severity:** medium (a real, silent false-negative: `diff` could report `"identical": true` for two
+documents whose actual content genuinely differs). **Found:** 2026-09-20, running a from-scratch
+end-to-end CLI battery against the real compiled binary and real fixture files, specifically covering a
+case none of the existing tests exercised (same CONTENT segment count, different real payload). **Status:**
+RESOLVED 2026-09-20, T-0395.
+
+`diff_real.go` classified a changed construct by comparing `SegmentTableSlot.Digest` between the two
+documents' segment tables. Nothing in any writer path in this codebase ever populates that field with a
+real content digest for CONTENT segments — every fixture across the test suite, and every document
+`merge`/`sign`/`migrate` write, leaves it zero. Two documents with the same segment count therefore always
+compared zero-equals-zero and were reported identical, regardless of what their real content actually
+was. The only existing test (`TestTR_012_DiffVerbReadsRealFiles`) never caught this because its one
+"differs" case used a different segment *count* (2 vs 3), which the real bug still detected correctly
+(missing/extra ordinal) — it just never exercised "same count, different content," the common real case.
+This also contradicted `diff.go`'s own documented contract: "reports construct-level changes... not
+storage units" — comparing by storage ordinal/slot-digest was never construct-level to begin with.
+
+**Fix:** `diff_real.go` now decodes real CONTENT via `extract.LoadContentRecords`, keyed by the AUTHORED
+unit-id — the same identity `merge`/`project`/`redact`/`publish`/`verify` already use post
+GAP-VERIFY-CONTENT-REBUILD — and compares real frame bytes directly (SHA-256 previews in the change
+description, not the comparison itself). The existing test's fixture builder (`writeDocWithContentSegments`,
+raw non-decodable filler bytes, fine for `extract`'s byte-count assertions but never a valid content-model
+frame) could not exercise this at all; replaced with `writeDocWithDecodableContent` building genuine
+decodable frames, and the test now explicitly covers "same construct count, real content differs."
+Verified with the actual compiled binary via a from-scratch end-to-end battery (37/37 real-file cases
+passing across all 11 verbs) as well as the unit test.
+
+## FINDING-2026-09-20 — validate never wires the storage_integrity_tree check (FR-104/FR-105), OPEN, not fixed here
+
+**Severity:** potentially high — flagged, NOT fixed, deliberately, given its blast radius (see below).
+**Found:** 2026-09-20, investigating why the DEFECT-2026-09-20b diff bug's root cause (a CONTENT segment's
+`SegmentTableSlot.Digest` is never populated with a real content digest anywhere) was never itself caught
+by `validate`. **Status:** OPEN — reported here, not assigned a task ID or fixed, because fixing it
+correctly is a real, separately-scoped piece of work, not a small patch.
+
+`pkg/validate/storageintegrity.go` already implements a real, tested `CheckStorageIntegrityTree`
+function: it recomputes T_S (the storage-integrity Merkle tree) fresh from the current SegmentTable and
+compares it against the winning commit-ring record's `ledger_root`, per its own doc comment citing
+FR-104/FR-105 and naming `storage_integrity_tree` as "cli.md's `validate` stdout schema['s] required check
+key." **`pkg/cli/validate_real.go`'s `realValidateStepsFor` never calls it.** The real `validate` verb
+today runs exactly 4 checks (header decode, capability arithmetic, ring-winner selection,
+frontmatter+segment-table decode) and none of them recompute or compare any segment's real content
+digest against its declared `slot-digest`. A document whose CONTENT segment bytes do not match their
+declared digest — including, but not limited to, every zero-digest fixture DEFECT-2026-09-20b's writeup
+describes — currently passes `validate` as `OK`.
+
+**Why this is reported rather than fixed in the same pass as DEFECT-2026-09-20b:** wiring this check for
+real would very likely flip a large, currently-unknown number of existing fixtures across `pkg/cli`'s own
+test suite (and possibly other packages') from passing `validate` to failing it, since essentially none of
+them populate a real per-segment digest today — this needs its own audit of the fixture-generation
+convention codebase-wide, not a same-turn patch alongside two unrelated CLI defects. Recorded here plainly
+per this project's honesty rule, rather than silently left un-mentioned or rushed.
+
 ## Honesty note
 
 T-0349, T-0356, and plan.md's Conflict 5 above name Eyvar García as decision-maker because those
