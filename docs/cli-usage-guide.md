@@ -6,9 +6,9 @@ exit code, and stdout field, with requirement IDs), see
 of truth; this one just shows you how to actually run the thing.
 
 All 11 verbs are wired to real file I/O and independently verified end-to-end as of 2026-09-19
-(`DEFECT-2026-09-19` and `DEFECT-2026-09-19b` in `specs/CHANGES.md`, tasks T-0373–T-0390). Two
-narrower, honestly-scoped gaps remain — see "Honest limitations" at the bottom before relying on
-`merge` or `sign`.
+(`DEFECT-2026-09-19`, `DEFECT-2026-09-19b`, `DEFECT-2026-09-19c` in `specs/CHANGES.md`, tasks
+T-0373–T-0392). One narrower, honestly-scoped gap remains — see "Honest limitations" at the bottom
+before relying on `merge`'s full precondition coverage.
 
 ## Building it
 
@@ -127,9 +127,11 @@ Reconciles two divergent edits of a common base document.
 $ protodoc merge base.pdl mine.pdl theirs.pdl --out merged.pdl
 ```
 
-Classifies the merge (clean / `CONFLICT` / `REFUSED` for a real policy violation like a history-mode
-mismatch) from real decoded content. See "Honest limitations" below — it does not yet write a fully
-reconstructed merged document for the clean case.
+Runs a real per-construct three-way merge (`pkg/merge.ThreeWayMerge`) over actual decoded content: a
+construct changed on only one side takes that side's value, an identical change on both sides is
+agreed, and a genuine divergent change is a real `CONFLICT` naming both actual values. A clean merge
+writes the real, re-canonicalized result to `--out`. `--out` is required. See "Honest limitations"
+below for the one precondition set not yet wired.
 
 ### `project <file> --to <path> [--format=text|html]`
 
@@ -162,17 +164,26 @@ $ protodoc publish my-document.pdl --out compacted.pdl
 
 ### `sign <file> --key <ref> --coverage total|subset [--subset-range <start>:<end> ...] --intent <value> --out <path>`
 
-Computes a new EdDSA-Protodoc-1 signature. `--key` names a key held by your platform's key store or
-HSM — the tool never accepts a raw private key on the command line. `--intent` must be one of
+Computes a real, deterministic EdDSA-Protodoc-1 signature and embeds it as a new `SIGNATURE` segment
+in a re-serialized document written to `--out`. `--key` names a key held by your platform's key store
+or HSM — the tool never accepts a raw private key on the command line. `--intent` must be one of
 `author-approval`, `witness-attestation`, `notarization`, `custodial-transfer`. All four flags plus
 `--out` are required.
 
 ```bash
 $ protodoc sign my-document.pdl --key my-signing-key --coverage total --intent author-approval --out signed.pdl
+{"coverage_total":true,"exit_code":0,"findings":[],"out":"signed.pdl","signature_len":64,"signed_document_complete":true,"status":"OK","verb":"sign"}
 ```
 
-See "Honest limitations" below — `--out` does not yet contain the new signature embedded in a
-re-serialized document.
+**Requires the document to already carry `ATTESTATION_EVIDENCE` records** (a credential chain and a
+time attestation) in its ATTEST segments — `sign` discovers and references them, it never fabricates
+evidence. A document without them is correctly `REFUSED` (exit 6), per `cli.md` S11, rather than
+signed with a missing mandatory reference:
+
+```bash
+$ protodoc sign document-without-evidence.pdl --key k --coverage total --intent author-approval --out signed.pdl
+{"exit_code":6,"findings":[{"rule_id":"FR-070","message":"sign refused: required LTV evidence not present in document: missing credential-chain, time-attestation"}],"out_written":false,"status":"REFUSED","verb":"sign"}
+```
 
 ### `migrate <file> --to-major <N> --out <path> [--rescind-and-resign --new-key <ref> --new-param-set <id>]`
 
@@ -186,22 +197,15 @@ $ protodoc migrate old-document.pdl --to-major 2 --out migrated.pdl
 
 ## Honest limitations (as of 2026-09-19)
 
-Two narrower gaps remain, deliberately not papered over — writing fabricated output would be worse
-than leaving them unimplemented, per this project's honesty rule (`specs/CHANGES.md`'s
-`DEFECT-2026-09-19b` resolution notes):
+One narrower gap remains, deliberately not papered over — writing fabricated output would be worse
+than leaving it unimplemented, per this project's honesty rule (`specs/CHANGES.md`'s
+`DEFECT-2026-09-19c` resolution notes):
 
-- **`sign --out` does not yet contain an embedded signature.** The signature itself is genuinely,
-  correctly, deterministically computed (`signature_len`, `coverage_total`, etc. in the response are
-  real) — but splicing a new `SIGNATURE` segment into a re-serialized document needs real
-  segment-table/commit-ring reconstruction that doesn't exist yet. `--out` currently receives an
-  unmodified copy of the input, and the response says so explicitly
-  (`"signed_document_complete": false` plus a finding). Don't treat `--out` as a signed document yet;
-  use the returned signature metadata directly if you need it.
-- **`merge`'s clean-merge case does not yet write a fully reconstructed merged document.** Conflict
-  detection and refusal conditions (history-mode mismatch, etc.) are real, derived from actual decoded
-  content — but assembling genuine merged output needs the full `pkg/merge` R1/R2/R3 classification
-  wired in, which is separately scoped future work.
+- **`merge` wires the real per-construct three-way merge, but not the full `pkg/merge.Orchestrate`
+  precondition set.** CON-024 (retention-point crossing) and FR-096 (erased-unit replay) still need
+  real History/Erasure segment decoding, which no CLI verb performs yet. A history-mode mismatch
+  (CON-025) is checked and correctly `REFUSED`; the other two guard conditions are not yet evaluated.
 
-Everything else — `validate`, `inspect`, `extract`, `verify`, `diff`, `project`, `redact`, `publish`,
-`migrate` (forward migrations without `--rescind-and-resign`) — reads, decodes, validates, and writes
-real files correctly, independently verified end-to-end.
+Everything else — `validate`, `inspect`, `extract`, `verify`, `diff`, `merge` (the wired parts), `project`,
+`redact`, `publish`, `sign`, `migrate` — reads, decodes, validates, and writes real files correctly,
+independently verified end-to-end, including a real signed-document round-trip through `validate`.
