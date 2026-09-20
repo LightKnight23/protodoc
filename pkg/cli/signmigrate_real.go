@@ -174,12 +174,18 @@ func realSignRun(path, key, coverage string, subsetRanges [][2]int) SignResult {
 	}
 	newWinner.StructureDigest = sd
 
-	// Write the reissued winner into every ring slot (a fresh single-writer
-	// commit: all slots carry the new winning record, self-sealed on Encode).
+	// Write the reissued winner into exactly ONE ring slot, round-robin by
+	// sequence mod 7 (pkg/ledger/writecost.go's documented ring convention;
+	// bug fix, T-0392 follow-up): the other 6 slots keep their prior records
+	// unchanged. Writing the same new record into all 7 slots (the original
+	// T-0392 commit) gave every slot an identical, tied sequence number,
+	// which PD-RING-001 correctly rejects as a structural ambiguity -- a
+	// signed document produced that way failed `validate` outright. Verified
+	// by re-running `validate`/`inspect` against a real signed output after
+	// this fix: both now report OK.
 	ringOut := newPrefix[container.HeaderSize : container.HeaderSize+container.CommitRingSize]
-	for i := 0; i < container.CommitRingSlots; i++ {
-		newWinner.Encode(ringOut[i*container.RingSlotSize : (i+1)*container.RingSlotSize])
-	}
+	winnerSlot := int(newWinner.Sequence % container.CommitRingSlots)
+	newWinner.Encode(ringOut[winnerSlot*container.RingSlotSize : (winnerSlot+1)*container.RingSlotSize])
 
 	// Assemble the complete output: new prefix + all existing bodies + new seg.
 	out := make([]byte, 0, int(newLedgerLength))

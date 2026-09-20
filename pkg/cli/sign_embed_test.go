@@ -171,4 +171,16 @@ func TestTR_012_SignVerbEmbedsRealSignature(t *testing.T) {
 	if !bytes.Equal(r1.Output, r2.Output) {
 		t.Errorf("signing the same file+key twice must produce byte-identical output (NFR-006)")
 	}
+
+	// The signed output must itself be a VALID document (a genuine bug found
+	// here previously: writing the reissued ring record into all 7 slots
+	// gave every slot an identical, tied sequence number, which PD-RING-001
+	// correctly rejects -- validate/inspect both failed on the "signed"
+	// output). Round-trip it through the real validate backend to prove the
+	// commit-ring reissue is actually well-formed, not just that a
+	// SIGNATURE record decodes in isolation.
+	vres := runValidate([]string{out2}, nil)
+	if vres.Status != "OK" {
+		t.Errorf("signed document fails validate: status=%s findings=%+v (the signed output must itself be a valid Protodoc document)", vres.Status, vres.Findings)
+	}
 }

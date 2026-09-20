@@ -242,8 +242,9 @@ end-to-end re-runs of every reproduction command above against the fixed binary.
 
 **Severity:** medium (functionality gap, not a false-success report -- both cases were already disclosed
 plainly, never silently claimed complete). **Found:** 2026-09-19, while scoping how to close the two
-honest gaps DEFECT-2026-09-19b's resolution deliberately left open. **Status:** merge RESOLVED 2026-09-19
-(T-0391); sign remains OPEN, handed off with a concrete, investigated scope (T-0392).
+honest gaps DEFECT-2026-09-19b's resolution deliberately left open. **Status:** RESOLVED 2026-09-19
+(merge: T-0391; sign: T-0392, including a follow-up ring-reissue bug found and fixed during independent
+re-verification -- see below).
 
 **merge (RESOLVED, T-0391):** the previous fix only corrected `merge`'s exit code (T-0384); it still
 classified conflicts from ordinal-keyed SegmentTable digests (a storage-position heuristic, not real
@@ -301,6 +302,18 @@ investigation rather than rushed. Filed as **T-0392**.
    evidence-bearing document yields a file larger than the input that decodes with one more ATTEST
    segment (the spliced SIGNATURE, which itself decodes and references the real evidence), and signing
    twice is byte-identical (NFR-006).
+
+**Follow-up bug found and fixed during independent re-verification (2026-09-19, same day):** the commit-
+ring reissue wrote the same new record into all 7 ring slots, giving every slot an identical, tied
+sequence number -- `PD-RING-001` correctly rejects this as a structural ambiguity, so the "signed"
+output failed `validate`/`inspect` outright despite `sign` itself reporting `OK`. Caught by generating a
+real evidence-bearing fixture, signing it with the actual compiled binary, and round-tripping the result
+through `validate` -- not by inspecting the diff. Fixed to write the reissued record into exactly the
+one ring slot the round-robin convention names (`sequence % 7`, per `pkg/ledger/writecost.go`'s own
+documented scheme), leaving the other 6 slots' prior records untouched. `TestTR_012_SignVerbEmbedsRealSignature`
+now also round-trips its embed-path output through `runValidate` to catch this class of regression
+directly, since the original test decoded the SIGNATURE record in isolation without ever confirming the
+whole document it lived in was still valid.
 
 ## Honesty note
 
