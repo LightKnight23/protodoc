@@ -333,6 +333,45 @@ now also round-trips its embed-path output through `runValidate` to catch this c
 directly, since the original test decoded the SIGNATURE record in isolation without ever confirming the
 whole document it lived in was still valid.
 
+## DEFECT-2026-09-20 — verify never stripped an ATTEST segment's ledger header, so every real ATTEST record (SIGNATURE included) failed to decode
+
+**Severity:** medium (a real signature was always mis-reported "unverified"; not a false-success report —
+UNVERIFIED is the honest, conservative status, just for the wrong reason). **Found:** 2026-09-20, while
+investigating a plainly-flagged pre-existing limitation ("verify doesn't distinguish SIGNATURE from
+ATTESTATION_EVIDENCE records") and reproducing it against a real signed document rather than trusting the
+description at face value. **Status:** RESOLVED 2026-09-20, T-0394.
+
+Manual reproduction against a real `sign`-produced document showed all 4 ATTEST segments (3
+`ATTESTATION_EVIDENCE` + 1 real `SIGNATURE`) reporting `"verdict":"unverified"` — including the genuine
+signature, not just the unrelated evidence records the original description named. Root cause:
+`verify_real.go` read each ATTEST segment's raw octets and passed them straight to
+`integrity.DecodeSignatureRecord` without stripping the leading 64-octet ledger segment header
+(`ledger.EncodeSegmentHeader`'s "PDS1"-magic framing, the same framing `sign` itself writes and
+`attestreader.go` already strips correctly for evidence discovery) — so decode failed on every ATTEST
+segment regardless of kind, real signature included. Separately, `verify` was also reporting one
+`signatures` array entry per ATTEST segment rather than per SIGNATURE frame, contradicting cli.md S5's
+own contract ("one entry per SIGNATURE frame... `ATTESTATION_EVIDENCE` is not itself a signature").
+
+**Fix:** `verify_real.go` now reuses `attestreader.go`'s own `attestSegmentBody` (header strip) and
+`readAttestRecordDiscriminant` (kind dispatch), decoding only records whose discriminant is `0x40`
+(SIGNATURE) and silently skipping `0x42` (ATTESTATION_EVIDENCE) segments entirely — no fabricated verdict
+for a record type verify was never asked to verify. Verified with
+`TestTR_012_VerifyDistinguishesSignatureFromEvidence`: a real signed document carrying 3 evidence records
+and 1 signature now reports exactly one `signatures` entry, and that entry is no longer `"unverified"`
+from a decode failure.
+
+**New, separate, honestly-disclosed limitation surfaced (NOT fixed here, out of this defect's scope):**
+the real signature now decodes and reaches `integrity.SignedObjectForSignature`, which currently always
+returns `ErrPresentationRefUnresolved` for `sign`'s output — `sign` leaves `sig-presentation-ref` at
+`zero16` for total-coverage signatures (`signmigrate_real.go`'s own comment: "no presentation artefact
+bound in this minimal signed document"), but `SignedObjectForSignature`'s docstring states a zero16
+presentation ref is *unconditionally* unresolved, with no total-coverage exception. The practical effect:
+a `sign`-produced signature currently verifies as `"covering_unavailable_state"` (`UNAVAILABLE`, exit 4),
+never `"valid"`, even when the state is fully reconstructable. This is a real gap in either `sign` (it may
+need to mint a real, empty/no-op PRESENTATION_ARTEFACT segment for total coverage) or in
+`SignedObjectForSignature`'s contract (it may need a documented total-coverage exception) — a design
+question for `sign`/`integrity`, not a `verify`-side bug, and not something to guess at silently.
+
 ## Honesty note
 
 T-0349, T-0356, and plan.md's Conflict 5 above name Eyvar García as decision-maker because those

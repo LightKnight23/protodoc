@@ -1,8 +1,20 @@
-// Real verify backend (T-0374, updated to close GAP-VERIFY-CONTENT-REBUILD).
+// Real verify backend (T-0374, updated to close GAP-VERIFY-CONTENT-REBUILD;
+// T-0394 fixes a real decode bug: every ATTEST segment's raw octets carry a
+// leading ledger segment header (magic "PDS1", ledger.SegmentHeaderSize
+// octets) which this backend never stripped, so integrity.DecodeSignatureRecord
+// failed on EVERY real ATTEST segment -- including a genuine SIGNATURE record
+// -- reporting "unverified" across the board rather than "valid" for a real
+// signature. Fixed by reusing attestreader.go's own framing helpers
+// (attestSegmentBody, readAttestRecordDiscriminant), which already get this
+// right for sign's evidence discovery. cli.md S5 also specifies one
+// `signatures` entry per SIGNATURE frame, not one per ATTEST segment: an
+// ATTESTATION_EVIDENCE record is not itself a signature to verify, so it is
+// now skipped rather than mis-decoded as one and reported "unverified".
+//
 // Opens the file, runs the CP-006 validate-first precondition, REBUILDS the
 // content-commitment tree (T_C) from the real decoded ContentRecords via
-// extract.LoadContentRecords + integrity.TCRoot, and verifies each ATTEST
-// SignatureRecord against that recomputed state:
+// extract.LoadContentRecords + integrity.TCRoot, and verifies each real
+// SIGNATURE record against that recomputed state:
 //
 //   - If the recomputed T_C_root does not match the winning commit-ring
 //     record's recorded T_C_root, the file's own state is internally
@@ -100,9 +112,20 @@ func realVerifyRun(path string) []VerifyVerdict {
 		if !integrity.IsAttestTyped(slot) {
 			continue
 		}
-		body := make([]byte, slot.Length)
-		if _, err := f.ReadAt(body, int64(slot.Offset)); err != nil {
+		raw := make([]byte, slot.Length)
+		if _, err := f.ReadAt(raw, int64(slot.Offset)); err != nil {
 			verdicts = append(verdicts, VerifyVerdict{Verdict: "unverified"})
+			continue
+		}
+		body := attestSegmentBody(raw)
+		disc, err := readAttestRecordDiscriminant(body)
+		if err != nil {
+			verdicts = append(verdicts, VerifyVerdict{Verdict: "unverified"})
+			continue
+		}
+		if disc != discSignature {
+			// Not a signature (e.g. ATTESTATION_EVIDENCE, cli.md S5: verify
+			// reports one entry per SIGNATURE frame, never per ATTEST segment).
 			continue
 		}
 		sig, err := integrity.DecodeSignatureRecord(body)

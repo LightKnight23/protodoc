@@ -102,6 +102,9 @@ $ protodoc verify my-document.pdl
 ```
 
 An unsigned document reports `OK` with an empty `signatures` array — that's expected, not an error.
+`signatures` carries exactly one entry per real `SIGNATURE` frame — `ATTESTATION_EVIDENCE` records
+alongside it are not signatures and are never listed. A `sign`-produced document currently verifies as
+`"covering_unavailable_state"` rather than `"valid"` — see "Honest limitations" below.
 
 ### `diff <fileA> <fileB> [--format=json|text]`
 
@@ -199,14 +202,21 @@ strictly greater than the file's current one. `--to-major` and `--out` are both 
 $ protodoc migrate old-document.pdl --to-major 2 --out migrated.pdl
 ```
 
-## Honest limitations (as of 2026-09-19)
+## Honest limitations (as of 2026-09-20)
 
-No CLI-verb gap is currently known and disclosed in `specs/CHANGES.md`. `validate`, `inspect`, `extract`,
-`verify`, `diff`, `merge`, `project`, `redact`, `publish`, `sign`, `migrate` all read, decode, validate,
-and write real files correctly, independently verified end-to-end — including a real signed-document
-round-trip through `validate` and `merge`'s full CON-024/CON-025/FR-096 precondition set against real
-decoded History/Erasure state.
+`validate`, `inspect`, `extract`, `verify`, `diff`, `merge`, `project`, `redact`, `publish`, `sign`,
+`migrate` all read, decode, validate, and write real files correctly, independently verified end-to-end
+— including `merge`'s full CON-024/CON-025/FR-096 precondition set against real decoded History/Erasure
+state, and `verify` correctly decoding a real SIGNATURE record and reporting exactly one entry per
+signature (`DEFECT-2026-09-20`, T-0394).
 
-One pre-existing, unrelated limitation is still open and tracked separately (not part of
-`DEFECT-2026-09-19c`): `verify` reports every ATTEST-segment record (both `SIGNATURE` and
-`ATTESTATION_EVIDENCE`) as "unverified" rather than distinguishing the two record kinds.
+One real, disclosed gap remains, surfaced while fixing that defect:
+
+- **A `sign`-produced signature never verifies as `"valid"`.** `sign` leaves `sig-presentation-ref` at
+  `zero16` for total-coverage signatures (no presentation artefact exists to bind), but
+  `integrity.SignedObjectForSignature` treats any zero16 presentation ref as unconditionally unresolved.
+  The practical effect: `verify` correctly decodes the signature and reaches this check, then reports
+  `"covering_unavailable_state"` (`UNAVAILABLE`, exit 4) rather than `"valid"`, even for a fully
+  reconstructable state. This needs a design decision in `sign` (mint a real no-op
+  `PRESENTATION_ARTEFACT` for total coverage) or in `integrity`'s contract (a documented total-coverage
+  exception) — not guessed at silently. See `specs/CHANGES.md`'s `DEFECT-2026-09-20` entry.
