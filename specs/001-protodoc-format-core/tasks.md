@@ -3926,6 +3926,7 @@ cmd/protodoc wraps every package above it into the 11 TR-012 verbs and is the fi
 | T-0389 | DEFECT-2026-09-19b fix: diff stdout payload matches cli.md's documented `{identical, added, removed, changed}` shape | TR-012, TR-002 | T-0377 | hephaestus | `TestTR_012_DiffVerbPayloadShape` (integration) |
 | T-0390 | DEFECT-2026-09-19b fix: unify missing/unreadable-file exit code to USAGE across every verb, matching inspect's already-correct behaviour and cli.md S1's own USAGE definition | TR-012 | T-0373, T-0374, T-0375, T-0376, T-0377, T-0378, T-0379, T-0380, T-0381, T-0382 | hephaestus | `TestTR_012_MissingFileIsUsageAcrossAllVerbs` (conformance) |
 | T-0391 | DEFECT-2026-09-19c fix: merge performs a real per-construct three-way merge (pkg/merge.ThreeWayMerge over authored-unit-id-keyed content) and writes genuine re-canonicalized output to --out for the clean case | TR-012, TR-003 | T-0384 | hephaestus | `TestTR_012_MergeVerbReadsRealFiles` (integration) |
+| T-0392 | DEFECT-2026-09-19c fix: sign discovers existing ATTESTATION_EVIDENCE segments in the document (a new ATTEST-segment record reader, distinct TLV framing from content frames), refuses per cli.md's own documented case when required credential-chain/time-attestation evidence is absent, and otherwise builds and splices a real SIGNATURE segment into a re-serialized document written to --out | TR-012, FR-063, FR-070 | T-0387 | hephaestus | `TestTR_012_SignVerbEmbedsRealSignature` (integration) |
 
 **T-0325** CLI command dispatch & global flags framework
 

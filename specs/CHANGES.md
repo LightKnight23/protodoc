@@ -238,6 +238,49 @@ not committed (ephemeral verification artifacts); the reproduction above is suff
 Independently verified (not self-reported): full `go build`/`go vet`/`go test ./...` green, plus manual
 end-to-end re-runs of every reproduction command above against the fixed binary.
 
+## DEFECT-2026-09-19c — merge's clean case and sign's --out never wrote real output (a narrower, honestly-scoped follow-on to DEFECT-2026-09-19b)
+
+**Severity:** medium (functionality gap, not a false-success report -- both cases were already disclosed
+plainly, never silently claimed complete). **Found:** 2026-09-19, while scoping how to close the two
+honest gaps DEFECT-2026-09-19b's resolution deliberately left open. **Status:** merge RESOLVED 2026-09-19
+(T-0391); sign remains OPEN, handed off with a concrete, investigated scope (T-0392).
+
+**merge (RESOLVED, T-0391):** the previous fix only corrected `merge`'s exit code (T-0384); it still
+classified conflicts from ordinal-keyed SegmentTable digests (a storage-position heuristic, not real
+content identity) and never wrote a merged file at all, nor enforced `--out`. Replaced with a genuine
+per-construct three-way merge (`pkg/merge.ThreeWayMerge`) over content decoded via
+`extract.LoadContentRecords` and keyed by the AUTHORED unit-id -- the same identity `project`/`redact`/
+`publish` already use post GAP-VERIFY-CONTENT-REBUILD. A real divergent edit now reports a genuine
+CONFLICT naming both real values (verified with a test that constructs two real conflicting documents);
+a clean merge is re-canonicalized and written to the now-enforced required `--out` (verified by reading
+the written file back and confirming it contains the real changed content, not a stub or a copy).
+Disclosed remaining gap: this wires `ThreeWayMerge` but not the full `pkg/merge.Orchestrate` precondition
+set -- CON-024 (retention-point crossing) and FR-096 (erased-unit replay) still need real History/
+Erasure segment decoding, which no CLI verb performs yet.
+
+**sign (OPEN, investigated, handed off as T-0392):** building a real signed-document write turned out to
+need more foundational plumbing than merge did, discovered by direct investigation of `pkg/integrity`:
+
+1. `SIGNATURE`/`ATTESTATION_EVIDENCE` records use PDL-TLV's discriminant as an actual **tag=0 field**
+   inside the record (`pdlfmt.DecodeRecord(src, known, -1)` decodes it directly); content-model frames
+   use a **raw leading discriminant byte** with the TLV body starting after it
+   (`extract.DecodeContentFrameUnitID`: `body := frame[1:]`). These are two different framing
+   conventions in this same codebase; no ATTEST-segment reader analogous to
+   `extract.LoadContentRecords` exists yet, and building one incorrectly risks silently misparsing
+   exactly the record type most worth getting right (a cryptographic signature).
+2. `SignatureRecord.Encode()` already enforces (correctly) that `sig-cred-chain-ref` and
+   `sig-time-attestation-ref` must never be `zero16` -- real evidence must already exist in the document
+   as `ATTESTATION_EVIDENCE` records (`ae-id`, tag=1, a genuine minted unit-id) for `sign` to reference.
+   `cli.md`'s own S11 already specifies the right behavior for the no-evidence case: `sign` REFUSES
+   rather than fabricating a reference -- this is not a new design decision, just an unbuilt one.
+3. No verb builds a new segment and appends it to the segment table + reissues a commit-ring record
+   yet. Even `migrate`'s "clean" path (T-0388) only carries the existing prefix forward unchanged; a
+   real `sign` needs genuinely new segment-table-growth plumbing no CLI verb has built before.
+
+This is closer in scope to several of the original M09 implementation tasks than to a bug fix, and
+touches the format's actual cryptographic signing path, so it is handed off with this concrete
+investigation rather than rushed. Filed as **T-0392**.
+
 ## Honesty note
 
 T-0349, T-0356, and plan.md's Conflict 5 above name Eyvar García as decision-maker because those
