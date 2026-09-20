@@ -5,9 +5,10 @@ exit code, and stdout field, with requirement IDs), see
 [`contracts/cli.md`](../specs/001-protodoc-format-core/contracts/cli.md) — that file is the source
 of truth; this one just shows you how to actually run the thing.
 
-All 11 verbs are wired to real file I/O and independently verified end-to-end as of 2026-09-19
-(`DEFECT-2026-09-19`, `DEFECT-2026-09-19b`, `DEFECT-2026-09-19c` in `specs/CHANGES.md`, tasks
-T-0373–T-0393). No disclosed CLI gap remains open in `specs/CHANGES.md` as of this writing.
+All 11 verbs are wired to real file I/O and independently verified end-to-end as of 2026-09-20
+(`DEFECT-2026-09-19`, `DEFECT-2026-09-19b`, `DEFECT-2026-09-19c`, `DEFECT-2026-09-20`,
+`DEFECT-2026-09-20b`, `FINDING-2026-09-20` in `specs/CHANGES.md`, tasks T-0373–T-0396). One real,
+disclosed gap remains — see "Honest limitations" at the bottom.
 
 ## Building it
 
@@ -207,17 +208,14 @@ $ protodoc migrate old-document.pdl --to-major 2 --out migrated.pdl
 `validate`, `inspect`, `extract`, `verify`, `diff`, `merge`, `project`, `redact`, `publish`, `sign`,
 `migrate` all read, decode, validate, and write real files correctly, independently verified end-to-end
 — including `merge`'s full CON-024/CON-025/FR-096 precondition set against real decoded History/Erasure
-state, and `verify` correctly decoding a real SIGNATURE record and reporting exactly one entry per
-signature (`DEFECT-2026-09-20`, T-0394).
+state, `verify` correctly decoding a real SIGNATURE record and reporting exactly one entry per signature
+(`DEFECT-2026-09-20`, T-0394), `diff` comparing real decoded content rather than an unpopulated digest
+field (`DEFECT-2026-09-20b`, T-0395), and `validate` genuinely recomputing and checking the
+`storage_integrity_tree` (FR-104/FR-105) against every segment's real octets, naming the offending
+ordinal on a mismatch (`FINDING-2026-09-20`, T-0396) — a document whose CONTENT segment bytes don't match
+their declared `slot-digest` is now correctly `INVALID`, not `OK`.
 
-Two real, disclosed gaps remain:
-
-- **`validate` does not yet run the `storage_integrity_tree` check (FR-104/FR-105).** `pkg/validate`
-  already has a real, tested implementation (`CheckStorageIntegrityTree`); the CLI's `validate` backend
-  simply never calls it. A document whose CONTENT segment bytes don't match their declared `slot-digest`
-  currently passes `validate` as `OK`. See `specs/CHANGES.md`'s `FINDING-2026-09-20` entry — flagged, not
-  yet fixed, since wiring it correctly needs a codebase-wide audit of fixture/writer digest population
-  first, not a same-turn patch.
+One real, disclosed gap remains:
 
 - **A `sign`-produced signature never verifies as `"valid"`.** `sign` leaves `sig-presentation-ref` at
   `zero16` for total-coverage signatures (no presentation artefact exists to bind), but

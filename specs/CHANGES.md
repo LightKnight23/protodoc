@@ -401,13 +401,12 @@ decodable frames, and the test now explicitly covers "same construct count, real
 Verified with the actual compiled binary via a from-scratch end-to-end battery (37/37 real-file cases
 passing across all 11 verbs) as well as the unit test.
 
-## FINDING-2026-09-20 — validate never wires the storage_integrity_tree check (FR-104/FR-105), OPEN, not fixed here
+## FINDING-2026-09-20 — validate never wires the storage_integrity_tree check (FR-104/FR-105), RESOLVED
 
-**Severity:** potentially high — flagged, NOT fixed, deliberately, given its blast radius (see below).
-**Found:** 2026-09-20, investigating why the DEFECT-2026-09-20b diff bug's root cause (a CONTENT segment's
-`SegmentTableSlot.Digest` is never populated with a real content digest anywhere) was never itself caught
-by `validate`. **Status:** OPEN — reported here, not assigned a task ID or fixed, because fixing it
-correctly is a real, separately-scoped piece of work, not a small patch.
+**Severity:** potentially high — real gap, initially flagged rather than rushed, given its blast radius
+(see below). **Found:** 2026-09-20, investigating why the DEFECT-2026-09-20b diff bug's root cause (a
+CONTENT segment's `SegmentTableSlot.Digest` is never populated with a real content digest anywhere) was
+never itself caught by `validate`. **Status:** RESOLVED 2026-09-20, T-0396 (handed to Kiro; see below).
 
 `pkg/validate/storageintegrity.go` already implements a real, tested `CheckStorageIntegrityTree`
 function: it recomputes T_S (the storage-integrity Merkle tree) fresh from the current SegmentTable and
@@ -441,10 +440,20 @@ document still validates. `TestTR_012_ValidateDetectsRealDigestMismatch` proves 
 and a corrupted slot-digest is INVALID with the `storage_integrity_tree` finding. Both a critical T_S bug
 (recompute over the full `MaxSegments` table, not the live-only slice — unused slots' zero digest is
 distinct from an absent leaf) surfaced and were fixed. `go build/vet/test ./...` clean, the check never
-skipped or weakened. **Data-file note:** the untracked `protodoc-sample.pdl` (Eyvar's PRONOM/IANA
-submission artifact, prefix-only, built before this check existed) now fails `validate` because its stored
-`ledger_root` is zero rather than `T_S(empty table)`; it is not part of the test suite and is left for
-Eyvar to regenerate with a correct `ledger_root` rather than silently rewritten here.
+skipped or weakened.
+
+**Data-file follow-up (same day, `7aa79b6`):** the previously-untracked `protodoc-sample.pdl` (Eyvar's
+PRONOM/IANA submission artifact, prefix-only, built before this check existed) failed `validate` once the
+check went live, because its stored `ledger_root` was zero rather than a real `T_S`. Rather than leaving it
+broken, Kiro added `cmd/protodoc-gensample` (a reproducible generator) and regenerated the file in a
+follow-up commit, sealing a real `ledger_root`/digests while keeping the first 480 octets — including the
+offset-0 DROID/PRONOM signature bytes the submission's identification test relies on — byte-identical to
+the original (independently confirmed: only bytes at offset ≥523 changed). **Caveat, not a defect:** the
+exact bytes already emailed to `PRONOM@nationalarchives.gov.uk` on 2026-09-19 (T-0371) predate this
+regeneration, so the file now committed to the repo differs from that specific email attachment. The
+signature-matching region is unaffected either way, but if PRONOM's review process ever cross-references
+the public repo against the mailed attachment, the two are no longer byte-identical. No action taken on
+this by Kiro or Claude; flagged for Eyvar's awareness only.
 
 ## Honesty note
 
