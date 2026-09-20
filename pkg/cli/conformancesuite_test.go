@@ -60,17 +60,19 @@ func TestTR_012_CLIConformanceSuite(t *testing.T) {
 	check("diff/usage", "USAGE", runDiff([]string{"a"}, nil).Status)
 
 	// merge: OK, INVALID (conflict), REFUSED, USAGE.
-	MergeRun = func(string, string, string) MergeOutcome { return MergeOutcome{Kind: MergeClean} }
-	check("merge/ok", "OK", runMerge([]string{"a", "b", "c"}, nil).Status)
+	mergeOut := t.TempDir() + "/merge-out.pdl"
+	MergeRun = func(string, string, string) MergeOutcome { return MergeOutcome{Kind: MergeClean, Output: []byte("m")} }
+	check("merge/ok", "OK", runMerge([]string{"a", "b", "c", "--out", mergeOut}, nil).Status)
 	MergeRun = func(string, string, string) MergeOutcome {
 		return MergeOutcome{Kind: MergeConflict, ValueA: "x", ValueB: "y"}
 	}
-	check("merge/conflict", "INVALID", runMerge([]string{"a", "b", "c"}, nil).Status)
+	check("merge/conflict", "INVALID", runMerge([]string{"a", "b", "c", "--out", mergeOut}, nil).Status)
 	MergeRun = func(string, string, string) MergeOutcome {
 		return MergeOutcome{Kind: MergeRefused, RefusedCondition: "CON-024"}
 	}
-	check("merge/refused", "REFUSED", runMerge([]string{"a", "b", "c"}, nil).Status)
+	check("merge/refused", "REFUSED", runMerge([]string{"a", "b", "c", "--out", mergeOut}, nil).Status)
 	check("merge/usage", "USAGE", runMerge([]string{"a"}, nil).Status)
+	check("merge/usage-missing-out", "USAGE", runMerge([]string{"a", "b", "c"}, nil).Status)
 
 	// project: OK and USAGE. project now reads real files (T-0376), so give it a
 	// genuine valid prefix rather than a nonexistent path.

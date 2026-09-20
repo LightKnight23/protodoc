@@ -3,12 +3,15 @@ package cli
 import (
 	"errors"
 	"io"
+	"os"
 )
 
-// merge verb wiring (T-0333, TR-003). `protodoc merge` runs M13's DP-015 merge
-// classifier, surfacing a genuine R2/R3 conflict as CONFLICT (naming both
-// source values) and a precondition violation (CON-024 retention-point crossing,
-// CON-025 history-mode mismatch) as REFUSED naming the specific condition.
+// merge verb wiring (T-0333, TR-003; --out enforcement and real merged-output
+// write fixed by DEFECT-2026-09-19c/T-0391). `protodoc merge` runs a genuine
+// per-construct three-way merge, surfacing a real R2/R3 conflict as CONFLICT
+// (naming both source values, real bytes) and a precondition violation
+// (CON-025 history-mode mismatch) as REFUSED naming the specific condition. A
+// clean merge writes the real, re-canonicalized merged document to --out.
 
 // MergeOutcomeKind classifies a merge result.
 type MergeOutcomeKind int
@@ -30,6 +33,9 @@ type MergeOutcome struct {
 	// input, per cli.md's own exit-code table; a missing/unreadable input is
 	// INVALID, never REFUSED).
 	RefusedCondition string
+	// Output is the real, re-canonicalized merged document bytes, set only
+	// for Kind == MergeClean (DEFECT-2026-09-19c/T-0391).
+	Output []byte
 	// Err is set when an input (base/a/b) could not be opened, validated or
 	// decoded. Checked before Kind.
 	Err error
@@ -38,14 +44,32 @@ type MergeOutcome struct {
 // MergeRun is the injectable merge classifier backend (M13 DP-015).
 var MergeRun = func(base, a, b string) MergeOutcome { return MergeOutcome{} }
 
+// writeMergeFile is injectable so tests can observe/stub the write.
+var writeMergeFile = func(path string, data []byte) error {
+	return os.WriteFile(path, data, 0o644)
+}
+
 // runMerge classifies a three-way merge: a genuine R2/R3 conflict is reported
 // as a CONFLICT result (INVALID exit — no merged output is produced, naming
 // both source values); a precondition violation is REFUSED naming the specific
-// condition (CON-024/CON-025); otherwise the merge is clean (OK).
+// condition (CON-024/CON-025); otherwise the merge is clean (OK) and the real
+// merged document is written to the required --out.
 func runMerge(args []string, _ io.Writer) Result {
 	if len(args) < 3 {
 		return StatusUsage.ToResult(Result{
 			Findings: []Finding{{RuleID: "TR-012", Message: "merge requires <base> <a> <b>"}},
+		})
+	}
+	to := ""
+	for i := 3; i < len(args); i++ {
+		if args[i] == "--out" && i+1 < len(args) {
+			to = args[i+1]
+			i++
+		}
+	}
+	if to == "" {
+		return StatusUsage.ToResult(Result{
+			Findings: []Finding{{RuleID: "TR-012", Message: "merge requires --out <path>"}},
 		})
 	}
 	out := MergeRun(args[0], args[1], args[2])
@@ -75,6 +99,11 @@ func runMerge(args []string, _ io.Writer) Result {
 			Findings: []Finding{{RuleID: out.RefusedCondition, Message: "merge refused: " + out.RefusedCondition}},
 		})
 	default:
-		return StatusOK.ToResult(Result{Extra: map[string]any{"result": "MERGED"}})
+		if err := writeMergeFile(to, out.Output); err != nil {
+			return StatusInvalid.ToResult(Result{
+				Findings: []Finding{{RuleID: "TR-012", Message: "merge: writing --out: " + err.Error()}},
+			})
+		}
+		return StatusOK.ToResult(Result{Extra: map[string]any{"out": to, "result": "MERGED"}})
 	}
 }
