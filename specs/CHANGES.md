@@ -427,6 +427,25 @@ them populate a real per-segment digest today — this needs its own audit of th
 convention codebase-wide, not a same-turn patch alongside two unrelated CLI defects. Recorded here plainly
 per this project's honesty rule, rather than silently left un-mentioned or rushed.
 
+**RESOLVED 2026-09-20 (T-0396).** `realValidateStepsFor` now adds a 5th step at `StepTSRecompute` (step 6)
+that decodes the ring winner + segment table, builds a real `SegmentDigester` reading each live segment's
+octets from the file and SHA-256'ing them (the same sha256-over-complete-octets convention `slot-digest`
+uses), calls `CheckStorageIntegrityTree`, and maps a failing result to the `storage_integrity_tree`
+finding — recomputing T_S fresh over the full decoded table and comparing it to the winner's `ledger_root`
+(never trusting the stored root). The predicted fixture blast radius was real and was fixed properly, not
+dodged: a single shared assembler (`assembleDoc`/`writeDoc` in `fixtures_test.go`) now seals every fixture
+with real per-segment SHA-256 digests AND the correct `ledger_root = T_S(full table)`, and all 11
+fixture-builders across `pkg/cli` were migrated to it. `realSignRun` (T-0392) was corrected to recompute
+`ledger_root` over the new segment table after splicing its SIGNATURE segment, so a genuinely-signed
+document still validates. `TestTR_012_ValidateDetectsRealDigestMismatch` proves a correct document passes
+and a corrupted slot-digest is INVALID with the `storage_integrity_tree` finding. Both a critical T_S bug
+(recompute over the full `MaxSegments` table, not the live-only slice — unused slots' zero digest is
+distinct from an absent leaf) surfaced and were fixed. `go build/vet/test ./...` clean, the check never
+skipped or weakened. **Data-file note:** the untracked `protodoc-sample.pdl` (Eyvar's PRONOM/IANA
+submission artifact, prefix-only, built before this check existed) now fails `validate` because its stored
+`ledger_root` is zero rather than `T_S(empty table)`; it is not part of the test suite and is left for
+Eyvar to regenerate with a correct `ledger_root` rather than silently rewritten here.
+
 ## Honesty note
 
 T-0349, T-0356, and plan.md's Conflict 5 above name Eyvar García as decision-maker because those

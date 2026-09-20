@@ -2,7 +2,6 @@ package cli
 
 import (
 	"crypto/sha256"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -18,59 +17,16 @@ import (
 // a commit-ring winner declaring mode and retentionPoint (T-0393).
 func writeMergeGuardDoc(t *testing.T, mode container.HistoryMode, retentionPoint uint16, contentFrames [][]byte, historyBodies [][]byte) string {
 	t.Helper()
-	h := &container.Header{
-		FormatMajor: 1, DocumentClass: 1, CapabilityWritten: 1, CapabilityRequired: 1,
-		HistoryMode: mode, UnicodeVersionID: 1, PrefixLayoutID: 1,
-	}
-	base := uint64(prefixSize)
-	off := base
-	var slots []container.SegmentTableSlot
+	h := defaultHeader()
+	h.HistoryMode = mode
+	var segs []fixtureSeg
 	for _, fr := range contentFrames {
-		slots = append(slots, container.SegmentTableSlot{
-			SegmentType: container.SegmentTypeContent,
-			Offset:      off, Length: uint64(len(fr)), FrameCount: 1,
-		})
-		off += uint64(len(fr))
+		segs = append(segs, fixtureSeg{segType: container.SegmentTypeContent, body: fr})
 	}
 	for _, hb := range historyBodies {
-		slots = append(slots, container.SegmentTableSlot{
-			SegmentType: container.SegmentTypeHistory,
-			Offset:      off, Length: uint64(len(hb)), FrameCount: 1,
-		})
-		off += uint64(len(hb))
+		segs = append(segs, fixtureSeg{segType: container.SegmentTypeHistory, body: hb})
 	}
-	total := off
-	var ring [container.CommitRingSlots]container.CommitRingRecord
-	for i := range ring {
-		ring[i] = container.CommitRingRecord{Sequence: uint64(i + 1), LedgerLength: total, RetentionPoint: retentionPoint}
-	}
-	img := make([]byte, 0, total)
-	img = append(img, h.Encode(nil)...)
-	img = append(img, container.EncodeCommitRing(&ring, nil)...)
-	fmEnc, err := (&container.Frontmatter{}).Encode(nil)
-	if err != nil {
-		t.Fatalf("Frontmatter.Encode: %v", err)
-	}
-	img = append(img, fmEnc...)
-	stEnc, err := container.EncodeSegmentTable(slots, nil)
-	if err != nil {
-		t.Fatalf("EncodeSegmentTable: %v", err)
-	}
-	img = append(img, stEnc...)
-	if len(img) != prefixSize {
-		t.Fatalf("prefix %d, want %d", len(img), prefixSize)
-	}
-	for _, fr := range contentFrames {
-		img = append(img, fr...)
-	}
-	for _, hb := range historyBodies {
-		img = append(img, hb...)
-	}
-	path := filepath.Join(t.TempDir(), "guardfixture.pdl")
-	if err := os.WriteFile(path, img, 0o600); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	return path
+	return writeDoc(t, h, segs, func(r *container.CommitRingRecord) { r.RetentionPoint = retentionPoint })
 }
 
 // TestCON_024_MergeRefusesAcrossRetentionPoint is T-0393's named integration

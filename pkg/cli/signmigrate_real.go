@@ -166,8 +166,19 @@ func realSignRun(path, key, coverage string, subsetRanges [][2]int) SignResult {
 	newWinner.LedgerLength = newLedgerLength
 	newWinner.SegmentTableDigest = newSegTableDigest
 	newWinner.ParentStateID = winner.StateID
-	// T_C_root unchanged (content not altered). structure_digest recomputed
-	// fresh over the new ring/segment-table via the integrity assembler.
+	// Recompute ledger_root = T_S over the NEW segment table: signing appended
+	// a real ATTEST segment, so the storage-integrity tree genuinely changes.
+	// T_S is computed over the FULL decoded table width (MaxSegments; unused
+	// slots carry a zero digest), matching what the validator recomputes.
+	// (T_C_root is carried forward unchanged — signing never alters content.)
+	fullSlots := make([]container.SegmentTableSlot, container.MaxSegments)
+	copy(fullSlots, slots)
+	newTS, err := integrity.TSRoot(fullSlots)
+	if err != nil {
+		return SignResult{Err: fmt.Errorf("sign: recomputing T_S over new segment table: %w", err)}
+	}
+	copy(newWinner.LedgerRoot[:], newTS[:])
+	// structure_digest recomputed fresh over the new ring/segment-table.
 	sd, err := recomputeStructureDigest(newPrefix, newWinner, newLedgerLength, slots)
 	if err != nil {
 		return SignResult{Err: err}

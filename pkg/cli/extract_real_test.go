@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -13,53 +12,15 @@ import (
 // Returns the path and total size. It is a genuine file extract.Walk can read.
 func writeDocWithContentSegments(t *testing.T, n int, segLen uint64) string {
 	t.Helper()
-	h := &container.Header{
-		FormatMajor: 1, DocumentClass: 1, CapabilityWritten: 1, CapabilityRequired: 1,
-		HistoryMode: container.HistoryComplete, UnicodeVersionID: 1, PrefixLayoutID: 1,
-	}
-	var ring [container.CommitRingSlots]container.CommitRingRecord
-	base := uint64(prefixSize)
-	total := base + uint64(n)*segLen
-	for i := range ring {
-		ring[i] = container.CommitRingRecord{Sequence: uint64(i + 1), LedgerLength: total}
-	}
-	slots := make([]container.SegmentTableSlot, n)
-	for i := 0; i < n; i++ {
-		slots[i] = container.SegmentTableSlot{
-			SegmentType: container.SegmentTypeContent,
-			Offset:      base + uint64(i)*segLen,
-			Length:      segLen,
-			FrameCount:  1,
-		}
-	}
-	img := make([]byte, 0, total)
-	img = append(img, h.Encode(nil)...)
-	img = append(img, container.EncodeCommitRing(&ring, nil)...)
-	fmEnc, err := (&container.Frontmatter{}).Encode(nil)
-	if err != nil {
-		t.Fatalf("Frontmatter.Encode: %v", err)
-	}
-	img = append(img, fmEnc...)
-	stEnc, err := container.EncodeSegmentTable(slots, nil)
-	if err != nil {
-		t.Fatalf("EncodeSegmentTable: %v", err)
-	}
-	img = append(img, stEnc...)
-	if len(img) != prefixSize {
-		t.Fatalf("prefix %d, want %d", len(img), prefixSize)
-	}
+	segs := make([]fixtureSeg, n)
 	for i := 0; i < n; i++ {
 		body := make([]byte, segLen)
 		for j := range body {
 			body[j] = byte('A' + i)
 		}
-		img = append(img, body...)
+		segs[i] = fixtureSeg{segType: container.SegmentTypeContent, body: body}
 	}
-	path := filepath.Join(t.TempDir(), "content.pdl")
-	if err := os.WriteFile(path, img, 0o600); err != nil {
-		t.Fatalf("write content fixture: %v", err)
-	}
-	return path
+	return writeDoc(t, defaultHeader(), segs, nil)
 }
 
 // TestTR_012_ExtractVerbReadsRealFile is T-0375's named integration test

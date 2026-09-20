@@ -9,12 +9,14 @@
 package cli
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 
 	"Protodoc/pkg/container"
+	"Protodoc/pkg/integrity"
 	"Protodoc/pkg/validate"
 )
 
@@ -98,8 +100,63 @@ func realValidateStepsFor(path string) ([]validate.Step, int) {
 			}
 			return nil
 		}},
+		// Step 6: storage_integrity_tree (FR-104/FR-105). Recompute T_S fresh
+		// from the segment table and compare it against the winning commit-ring
+		// record's ledger_root; a real digester reads each live segment's octets
+		// from the file and SHA-256's them (the same sha256-of-complete-octets
+		// convention slot-digest uses), so a segment whose bytes do not match
+		// its declared slot-digest is named as the offending ordinal. The
+		// STORED ledger_root is used only for comparison, never trusted.
+		{ID: validate.StepTSRecompute, Run: func() *validate.Finding {
+			ring := prefix[container.HeaderSize : container.HeaderSize+container.CommitRingSize]
+			winner, _, err := container.SelectWinner(ring, fileLen)
+			if err != nil {
+				return nil // step 3 already reports a ring-winner failure
+			}
+			tableArr, err := container.DecodeSegmentTable(prefix[container.SegmentTableOffset:])
+			if err != nil {
+				return nil // step 5 already reports a segment-table failure
+			}
+			slots := tableArr[:]
+
+			var storedRoot integrity.Digest
+			copy(storedRoot[:], winner.LedgerRoot[:])
+
+			digester := realSegmentDigester(path)
+			res, err := validate.CheckStorageIntegrityTree(slots, storedRoot, digester)
+			if err != nil {
+				return &validate.Finding{Step: validate.StepTSRecompute, RuleID: validate.StorageIntegrityCheckKey, Message: err.Error()}
+			}
+			return validate.StorageIntegrityFinding(res)
+		}},
 	}
 	return steps, len(steps)
+}
+
+// realSegmentDigester returns a SegmentDigester that reads a segment's actual
+// octets from the file at path and SHA-256's them -- the same
+// sha256-over-complete-segment-octets convention that produces
+// SegmentTableSlot.Digest (see pkg/cli/signmigrate_real.go's segment digest and
+// container.SegmentTableSlot.Digest's own doc). An unused slot, or a slot whose
+// declared extent cannot be read, reports ok=false (not tampered, just not
+// localisable here). It opens the file per call-through and reads only the
+// named segment's extent (bounded, CP-006).
+func realSegmentDigester(path string) validate.SegmentDigester {
+	return func(ordinal int, slot container.SegmentTableSlot) (digest [32]byte, ok bool) {
+		if slot.SegmentType == container.SegmentTypeUnused || slot.Length == 0 {
+			return [32]byte{}, false
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return [32]byte{}, false
+		}
+		defer f.Close()
+		body := make([]byte, slot.Length)
+		if _, err := f.ReadAt(body, int64(slot.Offset)); err != nil {
+			return [32]byte{}, false
+		}
+		return sha256.Sum256(body), true
+	}
 }
 
 // readBoundedPrefix opens path, stats it, and reads exactly the fixed prefix.

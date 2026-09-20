@@ -2,7 +2,6 @@ package cli
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 
 	"Protodoc/pkg/container"
@@ -17,43 +16,11 @@ import (
 // the tree recomputed from the frames, the state is reconstructable.
 func writeDocWithFramesAndTCRoot(t *testing.T, ids []pdlfmt.UnitID, tcRoot [32]byte) string {
 	t.Helper()
-	frames := make([][]byte, len(ids))
+	segs := make([]fixtureSeg, len(ids))
 	for i, id := range ids {
-		frames[i] = realFrame(0x01, id)
+		segs[i] = fixtureSeg{segType: container.SegmentTypeContent, body: realFrame(0x01, id)}
 	}
-	h := &container.Header{FormatMajor: 1, DocumentClass: 1, CapabilityWritten: 1, CapabilityRequired: 1, HistoryMode: container.HistoryComplete, UnicodeVersionID: 1, PrefixLayoutID: 1}
-	var ring [container.CommitRingSlots]container.CommitRingRecord
-	base := uint64(prefixSize)
-	off := base
-	slots := make([]container.SegmentTableSlot, len(frames))
-	body := uint64(0)
-	for i, fr := range frames {
-		slots[i] = container.SegmentTableSlot{SegmentType: container.SegmentTypeContent, Offset: off, Length: uint64(len(fr)), FrameCount: 1}
-		off += uint64(len(fr))
-		body += uint64(len(fr))
-	}
-	total := base + body
-	for i := range ring {
-		ring[i] = container.CommitRingRecord{Sequence: uint64(i + 1), LedgerLength: total, TCRoot: tcRoot}
-	}
-	img := make([]byte, 0, total)
-	img = append(img, h.Encode(nil)...)
-	img = append(img, container.EncodeCommitRing(&ring, nil)...)
-	fmEnc, _ := (&container.Frontmatter{}).Encode(nil)
-	img = append(img, fmEnc...)
-	stEnc, err := container.EncodeSegmentTable(slots, nil)
-	if err != nil {
-		t.Fatalf("EncodeSegmentTable: %v", err)
-	}
-	img = append(img, stEnc...)
-	for _, fr := range frames {
-		img = append(img, fr...)
-	}
-	path := filepath.Join(t.TempDir(), "tcfixture.pdl")
-	if err := os.WriteFile(path, img, 0o600); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	return path
+	return writeDoc(t, defaultHeader(), segs, func(r *container.CommitRingRecord) { r.TCRoot = tcRoot })
 }
 
 // TestTR_012_VerifyRecomputesContentTree proves verify genuinely REBUILDS the

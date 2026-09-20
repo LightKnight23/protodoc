@@ -4,8 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"Protodoc/pkg/container"
 )
 
 // writeValidPrefix writes a genuine, decodable fixed-prefix document (header +
@@ -14,35 +12,9 @@ import (
 // read, not a stub.
 func writeValidPrefix(t *testing.T) string {
 	t.Helper()
-	h := &container.Header{
-		FormatMajor: 1, DocumentClass: 1, CapabilityWritten: 1, CapabilityRequired: 1,
-		HistoryMode: container.HistoryComplete, UnicodeVersionID: 1, PrefixLayoutID: 1,
-	}
-	var ring [container.CommitRingSlots]container.CommitRingRecord
-	for i := range ring {
-		ring[i] = container.CommitRingRecord{Sequence: uint64(i + 1), LedgerLength: prefixSize}
-	}
-	img := make([]byte, 0, prefixSize)
-	img = append(img, h.Encode(nil)...)
-	img = append(img, container.EncodeCommitRing(&ring, nil)...)
-	fmEnc, err := (&container.Frontmatter{}).Encode(nil)
-	if err != nil {
-		t.Fatalf("Frontmatter.Encode: %v", err)
-	}
-	img = append(img, fmEnc...)
-	stEnc, err := container.EncodeSegmentTable(nil, nil)
-	if err != nil {
-		t.Fatalf("EncodeSegmentTable: %v", err)
-	}
-	img = append(img, stEnc...)
-	if len(img) != prefixSize {
-		t.Fatalf("assembled prefix %d octets, want %d", len(img), prefixSize)
-	}
-	path := filepath.Join(t.TempDir(), "valid.pdl")
-	if err := os.WriteFile(path, img, 0o600); err != nil {
-		t.Fatalf("write valid fixture: %v", err)
-	}
-	return path
+	// Zero content segments; assembleDoc seals the (empty) slot set's TSRoot
+	// into the ring's LedgerRoot so the storage-integrity check passes.
+	return writeDoc(t, defaultHeader(), nil, nil)
 }
 
 // TestTR_012_ValidateVerbRejectsGarbageFileAcceptsSample is T-0373's named

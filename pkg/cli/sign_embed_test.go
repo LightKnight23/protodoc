@@ -46,45 +46,12 @@ func writeDocWithEvidence(t *testing.T) (path string, credID, timeID pdlfmt.Unit
 	if err != nil {
 		t.Fatalf("time encode: %v", err)
 	}
-	segs := [][]byte{attestSegmentBytes(credB), attestSegmentBytes(revB), attestSegmentBytes(tmB)}
-
-	h := &container.Header{FormatMajor: 1, DocumentClass: 1, CapabilityWritten: 1, CapabilityRequired: 1, HistoryMode: container.HistoryComplete, UnicodeVersionID: 1, PrefixLayoutID: 1}
-	var ring [container.CommitRingSlots]container.CommitRingRecord
-	base := uint64(prefixSize)
-	off := base
-	slots := make([]container.SegmentTableSlot, len(segs))
-	body := uint64(0)
-	for i, s := range segs {
-		var dg [32]byte
-		copy(dg[:], hashSeg(s))
-		slots[i] = container.SegmentTableSlot{SegmentType: container.SegmentTypeAttest, Offset: off, Length: uint64(len(s)), FrameCount: 1, Digest: dg}
-		off += uint64(len(s))
-		body += uint64(len(s))
+	segs := []fixtureSeg{
+		{segType: container.SegmentTypeAttest, body: attestSegmentBytes(credB)},
+		{segType: container.SegmentTypeAttest, body: attestSegmentBytes(revB)},
+		{segType: container.SegmentTypeAttest, body: attestSegmentBytes(tmB)},
 	}
-	total := base + body
-	for i := range ring {
-		ring[i] = container.CommitRingRecord{Sequence: uint64(i + 1), LedgerLength: total, SegmentCount: uint16(len(segs))}
-	}
-	img := make([]byte, 0, total)
-	img = append(img, h.Encode(nil)...)
-	img = append(img, container.EncodeCommitRing(&ring, nil)...)
-	fmEnc, _ := (&container.Frontmatter{}).Encode(nil)
-	img = append(img, fmEnc...)
-	stEnc, err := container.EncodeSegmentTable(slots, nil)
-	if err != nil {
-		t.Fatalf("EncodeSegmentTable: %v", err)
-	}
-	img = append(img, stEnc...)
-	if len(img) != prefixSize {
-		t.Fatalf("prefix %d, want %d", len(img), prefixSize)
-	}
-	for _, s := range segs {
-		img = append(img, s...)
-	}
-	path = filepath.Join(t.TempDir(), "evidence.pdl")
-	if err := os.WriteFile(path, img, 0o600); err != nil {
-		t.Fatalf("write: %v", err)
-	}
+	path = writeDoc(t, defaultHeader(), segs, nil)
 	return path, credID, timeID
 }
 
