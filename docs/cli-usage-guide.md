@@ -7,8 +7,7 @@ of truth; this one just shows you how to actually run the thing.
 
 All 11 verbs are wired to real file I/O and independently verified end-to-end as of 2026-09-19
 (`DEFECT-2026-09-19`, `DEFECT-2026-09-19b`, `DEFECT-2026-09-19c` in `specs/CHANGES.md`, tasks
-T-0373–T-0392). One narrower, honestly-scoped gap remains — see "Honest limitations" at the bottom
-before relying on `merge`'s full precondition coverage.
+T-0373–T-0393). No disclosed CLI gap remains open in `specs/CHANGES.md` as of this writing.
 
 ## Building it
 
@@ -130,8 +129,13 @@ $ protodoc merge base.pdl mine.pdl theirs.pdl --out merged.pdl
 Runs a real per-construct three-way merge (`pkg/merge.ThreeWayMerge`) over actual decoded content: a
 construct changed on only one side takes that side's value, an identical change on both sides is
 agreed, and a genuine divergent change is a real `CONFLICT` naming both actual values. A clean merge
-writes the real, re-canonicalized result to `--out`. `--out` is required. See "Honest limitations"
-below for the one precondition set not yet wired.
+writes the real, re-canonicalized result to `--out`. `--out` is required.
+
+Before merging, three real preconditions are checked against the actual decoded documents, each refusing
+by name rather than silently proceeding: `CON-025` (the two sides declare different history modes),
+`CON-024` (an incoming change's real CONTENT-segment ordinal predates the base's declared retention
+point), and `FR-096` (an incoming change would re-derive content the base's HISTORY segments record as
+erased, matched by real content digest).
 
 ### `project <file> --to <path> [--format=text|html]`
 
@@ -197,15 +201,12 @@ $ protodoc migrate old-document.pdl --to-major 2 --out migrated.pdl
 
 ## Honest limitations (as of 2026-09-19)
 
-One narrower gap remains, deliberately not papered over — writing fabricated output would be worse
-than leaving it unimplemented, per this project's honesty rule (`specs/CHANGES.md`'s
-`DEFECT-2026-09-19c` resolution notes):
+No CLI-verb gap is currently known and disclosed in `specs/CHANGES.md`. `validate`, `inspect`, `extract`,
+`verify`, `diff`, `merge`, `project`, `redact`, `publish`, `sign`, `migrate` all read, decode, validate,
+and write real files correctly, independently verified end-to-end — including a real signed-document
+round-trip through `validate` and `merge`'s full CON-024/CON-025/FR-096 precondition set against real
+decoded History/Erasure state.
 
-- **`merge` wires the real per-construct three-way merge, but not the full `pkg/merge.Orchestrate`
-  precondition set.** CON-024 (retention-point crossing) and FR-096 (erased-unit replay) still need
-  real History/Erasure segment decoding, which no CLI verb performs yet. A history-mode mismatch
-  (CON-025) is checked and correctly `REFUSED`; the other two guard conditions are not yet evaluated.
-
-Everything else — `validate`, `inspect`, `extract`, `verify`, `diff`, `merge` (the wired parts), `project`,
-`redact`, `publish`, `sign`, `migrate` — reads, decodes, validates, and writes real files correctly,
-independently verified end-to-end, including a real signed-document round-trip through `validate`.
+One pre-existing, unrelated limitation is still open and tracked separately (not part of
+`DEFECT-2026-09-19c`): `verify` reports every ATTEST-segment record (both `SIGNATURE` and
+`ATTESTATION_EVIDENCE`) as "unverified" rather than distinguishing the two record kinds.

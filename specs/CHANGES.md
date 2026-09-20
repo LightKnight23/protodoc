@@ -243,8 +243,8 @@ end-to-end re-runs of every reproduction command above against the fixed binary.
 **Severity:** medium (functionality gap, not a false-success report -- both cases were already disclosed
 plainly, never silently claimed complete). **Found:** 2026-09-19, while scoping how to close the two
 honest gaps DEFECT-2026-09-19b's resolution deliberately left open. **Status:** RESOLVED 2026-09-19
-(merge: T-0391; sign: T-0392, including a follow-up ring-reissue bug found and fixed during independent
-re-verification -- see below).
+(merge: T-0391 then T-0393; sign: T-0392, including a follow-up ring-reissue bug found and fixed during
+independent re-verification -- see below). No disclosed gap remains open in this defect.
 
 **merge (RESOLVED, T-0391):** the previous fix only corrected `merge`'s exit code (T-0384); it still
 classified conflicts from ordinal-keyed SegmentTable digests (a storage-position heuristic, not real
@@ -255,9 +255,27 @@ per-construct three-way merge (`pkg/merge.ThreeWayMerge`) over content decoded v
 CONFLICT naming both real values (verified with a test that constructs two real conflicting documents);
 a clean merge is re-canonicalized and written to the now-enforced required `--out` (verified by reading
 the written file back and confirming it contains the real changed content, not a stub or a copy).
-Disclosed remaining gap: this wires `ThreeWayMerge` but not the full `pkg/merge.Orchestrate` precondition
-set -- CON-024 (retention-point crossing) and FR-096 (erased-unit replay) still need real History/
-Erasure segment decoding, which no CLI verb performs yet.
+Disclosed remaining gap at the time: this wired `ThreeWayMerge` but not the full `pkg/merge.Orchestrate`
+precondition set -- CON-024 (retention-point crossing) and FR-096 (erased-unit replay) still needed real
+History/Erasure segment decoding, which no CLI verb performed yet. Closed below by T-0393.
+
+**merge CON-024/FR-096 (RESOLVED 2026-09-19, T-0393).** Added `pkg/cli/historyreader.go`
+(`DiscoverErasureRecords`), a HISTORY-segment reader mirroring `attestreader.go`'s ATTEST-segment
+convention: each HISTORY segment carries one `ERASURE_RECORD` (FR-061), decoded via the package's own
+`history.DecodeErasureRecord`. `loadMergeState` now also decodes the winning commit-ring record's real
+`RetentionPoint` and each authored unit's real CONTENT-segment storage ordinal. `realMergeRun` builds the
+base's `history.Declaration` and an `merge.ErasureIndex` from its real erasure records, then for each
+incoming branch: every genuinely changed construct (via `merge.DiffConstructs`, never a storage-position
+heuristic) is checked with the already-existing `merge.CheckReplayOfErasedUnit` (digest match against a
+real erased identity -> REFUSED naming FR-096) and its real CONTENT ordinal is checked with the
+already-existing `merge.CheckRetentionPoint` (ordinal predates the declared retention point -> REFUSED
+naming CON-024). Both primitives already existed in `pkg/merge` (built by earlier M13 tasks) and were
+fully unit-tested there; T-0393's work was building the real HISTORY-segment decode path the CLI needed to
+feed them, not the guard logic itself. Verified with `TestCON_024_MergeRefusesAcrossRetentionPoint` (a
+change at a CONTENT ordinal predating a real declared retention point is refused; a change at/after it
+merges normally) and `TestFR_096_MergeRefusesReplayOfErasedUnit` (a branch reproducing a real erased
+unit's exact recorded digest is refused; the same identity with genuinely different content is a
+permitted new authoring act). No known gap remains in `merge`'s precondition coverage.
 
 **sign (OPEN, investigated, handed off as T-0392):** building a real signed-document write turned out to
 need more foundational plumbing than merge did, discovered by direct investigation of `pkg/integrity`:
